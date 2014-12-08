@@ -59,7 +59,7 @@ bool isMin(float val, const Mat &pix, int row, int col)
    }
    return true;
 }
-
+// DONE
 Mat HessianDetector::hessianResponse(const Mat &inputImage, float norm)
 {
    const int rows = inputImage.rows;
@@ -76,7 +76,6 @@ Mat HessianDetector::hessianResponse(const Mat &inputImage, float norm)
    float      *out = outputImage.ptr<float>(1) + 1;
    
    float norm2 = norm * norm;
-   // TODO CUDAble
    /* move 3x3 window and convolve */
    for (int r = 1; r < rows - 1; ++r)
    {

@@ -26,16 +26,16 @@ __global__ void performHessianResponse(const gpu::PtrStep<float> in, gpu::PtrSte
     //int offset = x + y * cols;
     /* fill in shift registers at the beginning of the row */
     /* fetch remaining values (last column) */
-    v11 = in(x, y);     v12 = in(x + 1, y);     v13 = in(x + 2, y);
-    v21 = in(x, y + 1); v22 = in(x + 1, y + 1); v23 = in(x + 2, y + 1);
-    v31 = in(x, y + 2); v32 = in(x + 1, y + 2); v33 = in(x + 2, y + 2);
+    v11 = in(y, x);     v12 = in(y + 1, x);     v13 = in(y + 2, x);
+    v21 = in(y, x + 1); v22 = in(y + 1, x + 1); v23 = in(y + 2, x + 1);
+    v31 = in(y, x + 2); v32 = in(y + 1, x + 2); v33 = in(y + 2, x + 2);
     // compute 3x3 Hessian values from symmetric differences.
     float Lxx = (v21 - 2 * v22 + v23);
     float Lyy = (v12 - 2 * v22 + v32);
     float Lxy = (v13 - v11 + v31 - v33) / 4.0f;
 
     /* normalize and write out */
-    out(x + 1, y + 1) = (Lxx * Lyy - Lxy * Lxy) * norm;
+    out(y + 1, x + 1) = (Lxx * Lyy - Lxy * Lxy) * norm;
 }
 
 void performHessianResponseCaller(const PtrStepSz<float>& inputImage, PtrStep<float> outputImage, float norm2)

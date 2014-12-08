@@ -311,18 +311,20 @@ void gaussianBlurInplace(Mat &inplace, float sigma)
 Mat doubleImage(const Mat &input)
 {
    Mat n(input.rows*2, input.cols*2, input.type());
-   const float *in = input.ptr<float>(0);
+   n.setTo(Scalar::all(0));
+   //const float *in = input.ptr<float>(0);
    
    for (int r = 0; r < input.rows-1; r++)
       for (int c = 0; c < input.cols-1; c++) 
       {
          const int r2 = r << 1; 
          const int c2 = c << 1;
-         n.at<float>(r2,c2)     = in[0];
-         n.at<float>(r2+1,c2)   = 0.5f *(in[0]+in[input.step]);
-         n.at<float>(r2,c2+1)   = 0.5f *(in[0]+in[1]);
-         n.at<float>(r2+1,c2+1) = 0.25f*(in[0]+in[1]+in[input.step]+in[input.step+1]);
-         ++in;
+         n.at<float>(r2,c2)     = input.at<float>(r, c);
+         n.at<float>(r2+1,c2)   = 0.5f *(input.at<float>(r, c)+input.at<float>(r+1, c));
+         n.at<float>(r2,c2+1)   = 0.5f *(input.at<float>(r, c)+input.at<float>(r, c+1));
+         n.at<float>(r2+1,c2+1) = 0.25f*(input.at<float>(r, c)+input.at<float>(r, c+1)+
+                 input.at<float>(r+1, c)+input.at<float>(r+1, c+1));
+         //++in;
       }
    for (int r = 0; r < input.rows-1; r++)
    {
@@ -341,7 +343,7 @@ Mat doubleImage(const Mat &input)
    n.at<float>(n.rows-1, n.cols-1) = n.at<float>(input.rows-1, input.cols-1);
    return n;
 }
-// TODO CUDA
+
 Mat halfImage(const Mat &input)
 {
    Mat n(input.rows/2, input.cols/2, input.type());
