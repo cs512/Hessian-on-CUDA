@@ -68,6 +68,7 @@ Mat HessianDetector::hessianResponse(const Mat &inputImage, float norm)
 
    // allocate output
    Mat outputImage(rows, cols, CV_32FC1);
+   outputImage.setTo(Scalar::all(0));
    
    // setup input and output pointer to be centered at 1,0 and 1,1 resp.
    // need pointer conv

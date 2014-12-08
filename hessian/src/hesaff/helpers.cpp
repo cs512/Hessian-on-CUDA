@@ -307,7 +307,7 @@ void gaussianBlurInplace(Mat &inplace, float sigma)
    int size = (int)(2.0 * 3.0 * sigma + 1.0); if (size % 2 == 0) size++;      
    GaussianBlur(inplace, inplace, Size(size, size), sigma, sigma, BORDER_REPLICATE);
 }
-
+// TODO CUDA
 Mat doubleImage(const Mat &input)
 {
    Mat n(input.rows*2, input.cols*2, input.type());
@@ -341,7 +341,7 @@ Mat doubleImage(const Mat &input)
    n.at<float>(n.rows-1, n.cols-1) = n.at<float>(input.rows-1, input.cols-1);
    return n;
 }
-
+// TODO CUDA
 Mat halfImage(const Mat &input)
 {
    Mat n(input.rows/2, input.cols/2, input.type());

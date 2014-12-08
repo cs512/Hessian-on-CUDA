@@ -25,6 +25,7 @@ using namespace cv;
 
 int main(int argc, char **argv)
 {
+    gpu::setDevice(0);
     PyramidParams par;
     CUHessianDetector cuDet;
     HessianDetector cpDet(par);
@@ -33,6 +34,8 @@ int main(int argc, char **argv)
         const int width = 13000;
 //        srand( (unsigned)time( NULL ) );
         Mat testInput(width, width, CV_32FC1, Scalar(0));
+        gpu::GpuMat cuTestInput;
+
         //float *data = testInput.ptr<float>(0);
         srand( (unsigned)time( NULL ) );
         for (int eachRow = 0; eachRow < width; eachRow++)
@@ -42,13 +45,16 @@ int main(int argc, char **argv)
                 testInput.at<float>(eachRow, eachCol) = float(rand() % 256);
             }
         }
+        cuTestInput.upload(testInput);
 
         float curSigma = par.initialSigma;
         clock_t cuStart = clock();
-        Mat cuCur = cuDet.hessianResponse(testInput, curSigma*curSigma);
+        gpu::GpuMat cuDeviceCur = cuDet.hessianResponse(cuTestInput, curSigma*curSigma);
         clock_t cuEnd = clock();
         Mat cpCur = cpDet.hessianResponse(testInput, curSigma*curSigma);
         clock_t cpEnd = clock();
+        Mat cuCur;
+        cuDeviceCur.download(cuCur);
         int count = 0;
         for (int eachRow = 0; eachRow < width; eachRow++)
         {
@@ -69,7 +75,7 @@ int main(int argc, char **argv)
         {
             cout<<"test pass."<<endl;
             cout<<"CUDA:\t"<<double(cuEnd - cuStart)/CLOCKS_PER_SEC<<"s"<<endl;
-            cout<<"CPU:\t"<<double(cpEnd - cuEnd)/CLOCKS_PER_SEC<<"ms"<<endl;
+            cout<<"CPU:\t"<<double(cpEnd - cuEnd)/CLOCKS_PER_SEC<<"s"<<endl;
         }
     }
 	return 0;
