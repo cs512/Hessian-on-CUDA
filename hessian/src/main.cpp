@@ -121,7 +121,8 @@ int main(int argc, char **argv)
 {
     //gpu::setDevice(0);
     PyramidParams par;
-    CUHessianDetector cuDet;
+    CUPyramidParams cuPar;
+    CUHessianDetector cuDet(cuPar);
     HessianDetector cpDet(par);
 
     //srand( (unsigned)time( NULL ) );

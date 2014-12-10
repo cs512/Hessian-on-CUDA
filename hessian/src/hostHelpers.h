@@ -15,7 +15,7 @@
 using namespace cv::gpu;
 
 void cuGaussianBlurInplace(GpuMat &inplace, float sigma);
-GpuMat cuGussianBlur(const GpuMat input, float sigma);
+GpuMat cuGaussianBlur(const GpuMat input, float sigma);
 
 
 #endif /* HOSTHELPER_H_ */

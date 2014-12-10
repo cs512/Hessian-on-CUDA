@@ -9,6 +9,8 @@
 #include <opencv2/gpu/gpu.hpp>
 #include <opencv2/gpu/gpumat.hpp>
 #include "pyramid.h"
+#include "hostHelpers.h"
+#include "deviceHelpers.h"
 
 using namespace cv;
 using namespace cv::gpu;
@@ -60,93 +62,44 @@ GpuMat CUHessianDetector::hessianResponse(const gpu::GpuMat &inputImage, float n
     return outputImage;
 }
 
-/*
-GpuMat CUHessianDetector::hessianResponse(const gpu::GpuMat &inputImage, float norm)
+__device__ bool isMax(float val, const PtrStepSz<float> pix, int row, int col)
 {
-    const int rows = inputImage.rows;
-    const int cols = inputImage.cols;
-    CV_Assert(inputImage.type() == CV_32FC1);
-    float norm2 = norm * norm;
-    gpu::GpuMat outputImage(rows, cols, CV_32FC1);
-    performHessianResponseCaller((PtrStepSz<float>)inputImage, (PtrStepSz<float>)outputImage, norm2);
-    return outputImage;
-}
-*/
-/*
-void CUHessianDetector::detectPyramidKeypoints(const Mat &image)
-{
-
-    float curSigma = 0.5f;
-    float pixelDistance = 1.0f;
-    Mat firstLevel;
-
-    if (par.upscaleInputImage > 0)
-    {
-        // TODO CUDAble
-        firstLevel = doubleImage(image);
-        pixelDistance *= 0.5f;
-        curSigma *= 2.0f;
-    }
-    else
-        firstLevel = image.clone();
-
-    // prepare first octave input image
-    if (par.initialSigma > curSigma)
-    {
-        float sigma = sqrt(
-                par.initialSigma * par.initialSigma - curSigma * curSigma);
-        // CV
-        gaussianBlurInplace(firstLevel, sigma);
-    }
-
-    // while there is sufficient size of image
-    int minSize = 2 * par.border + 2;
-    while (firstLevel.rows > minSize && firstLevel.cols > minSize)
-    {
-        Mat nextOctaveFirstLevel;
-        // TODO CUDAble
-        detectOctaveKeypoints(firstLevel, pixelDistance, nextOctaveFirstLevel);
-        pixelDistance *= 2.0;
-        // firstLevel gets destroyed in the process
-        firstLevel = nextOctaveFirstLevel;
-    }
+   for (int r = row - 1; r <= row + 1; r++)
+   {
+      for (int c = col - 1; c <= col + 1; c++)
+         if (pix(r, c) > val)
+            return false;
+   }
+   return true;
 }
 
-void CUHessianDetector::detectOctaveKeypoints(const Mat &firstLevel, float pixelDistance, Mat &nextOctaveFirstLevel)
+__device__ bool isMin(float val, const PtrStepSz<float> pix, int row, int col)
 {
-    octaveMap = Mat::zeros(firstLevel.rows, firstLevel.cols, CV_8UC1);
-    float sigmaStep = pow(2.0f, 1.0f / (float) par.numberOfScales);
-    float curSigma = par.initialSigma;
-    blur = firstLevel;
-    cur = hessianResponse(blur, curSigma*curSigma);
-    int numLevels = 1;
+   for (int r = row - 1; r <= row + 1; r++)
+   {
+      for (int c = col - 1; c <= col + 1; c++)
+         if (pix(r, c) < val)
+            return false;
+   }
+   return true;
+}
 
-    for (int i = 1; i < par.numberOfScales+2; i++)
-    {
-       // compute the increase necessary for the next level and compute the next level
-       float sigma = curSigma * sqrt(sigmaStep * sigmaStep - 1.0f);
-       // do the blurring
-       Mat nextBlur = gaussianBlur(blur, sigma);
-       // the next level sigma
-       sigma = curSigma*sigmaStep;
-       // compute response for current level
-       high = hessianResponse(nextBlur, sigma*sigma);
-       numLevels ++;
-       // if we have three consecutive responses
-       if (numLevels == 3)
-       {
-          // find keypoints in this part of octave for curLevel
-          findLevelKeypoints(curSigma, pixelDistance);
-          numLevels--;
-       }
-       if (i == par.numberOfScales)
-          // downsample the right level for the next octave
-          nextOctaveFirstLevel = halfImage(nextBlur);
-       prevBlur = blur; blur = nextBlur;
-       // shift to the next response
-       low = cur; cur = high;
-       curSigma *= sigmaStep;
-    }
+__global__ void performFindLevelKeypoints(const float border, const float curScale,
+        const float pixelDistance, const float positiveThreshold, const float negativeThreshold,
+        const PtrStepSz<float> low, const PtrStepSz<float> cur, const PtrStepSz<float> high)
+{
+    int col = threadIdx.x + blockIdx.x * blockDim.x;
+    if ((col >= cur.cols - border) || (col < border))
+        return;
+    int row = threadIdx.y + blockIdx.y * blockDim.y;
+    if ((row >= cur.rows - border) || (row < border))
+        return;
+    const float val = cur(row,col);
+    if ( (val > positiveThreshold && (isMax(val, cur, row, col) && isMax(val, low, row, col) && isMax(val, high, row, col))) ||
+         (val < negativeThreshold && (isMin(val, cur, row, col) && isMin(val, low, row, col) && isMin(val, high, row, col))) )
+     // either positive -> local max. or negative -> local min.
+        //localizeKeypoint(row, col, curScale, pixelDistance);
+    return;
 }
 
 void CUHessianDetector::findLevelKeypoints(float curScale, float pixelDistance)
@@ -154,19 +107,53 @@ void CUHessianDetector::findLevelKeypoints(float curScale, float pixelDistance)
     assert(par.border >= 2);
     const int rows = cur.rows;
     const int cols = cur.cols;
-    for (int r = par.border; r < (rows - par.border); r++)
-    {
-       for (int c = par.border; c < (cols - par.border); c++)
-       {
-          const float val = cur.at<float>(r,c);
-          if ( (val > positiveThreshold && (isMax(val, cur, r, c) && isMax(val, low, r, c) && isMax(val, high, r, c))) ||
-               (val < negativeThreshold && (isMin(val, cur, r, c) && isMin(val, low, r, c) && isMin(val, high, r, c))) )
-             // either positive -> local max. or negative -> local min.
-             localizeKeypoint(r, c, curScale, pixelDistance);
-       }
-    }
+    // TODO handle error
+    dim3 blocks((15 - 2 + cols) / 16, (15 - 2 + rows) / 16);
+    dim3 threads(16, 16);
+    performFindLevelKeypoints<<<blocks, threads>>>(par.border, curScale, pixelDistance,
+            positiveThreshold, negativeThreshold, low, cur, high);
+    return;
 }
 
+void CUHessianDetector::detectOctaveKeypoints(const GpuMat &firstLevel, float pixelDistance, GpuMat &nextOctaveFirstLevel)
+{
+   octaveMap = GpuMat(firstLevel.rows, firstLevel.cols, CV_8UC1);
+   octaveMap.setTo(Scalar::all(0));
+   float sigmaStep = pow(2.0f, 1.0f / (float) par.numberOfScales);
+   float curSigma = par.initialSigma;
+   blur = firstLevel;
+   cur = hessianResponse(blur, curSigma*curSigma);
+   int numLevels = 1;
+
+   for (int i = 1; i < par.numberOfScales+2; i++)
+   {
+      // compute the increase necessary for the next level and compute the next level
+      float sigma = curSigma * sqrt(sigmaStep * sigmaStep - 1.0f);
+      // do the blurring
+      GpuMat nextBlur = cuGaussianBlur(blur, sigma);
+      // the next level sigma
+      sigma = curSigma*sigmaStep;
+      // compute response for current level
+      high = hessianResponse(nextBlur, sigma*sigma);
+      numLevels ++;
+      // if we have three consecutive responses
+      if (numLevels == 3)
+      {
+         // find keypoints in this part of octave for curLevel
+         findLevelKeypoints(curSigma, pixelDistance);
+         numLevels--;
+      }
+      if (i == par.numberOfScales)
+         // downsample the right level for the next octave
+         nextOctaveFirstLevel = cuHalfImage(nextBlur);
+      prevBlur = blur; blur = nextBlur;
+      // shift to the next response
+      low = cur; cur = high;
+      curSigma *= sigmaStep;
+   }
+}
+
+/*
 void CUHessianDetector::localizeKeypoint(int r, int c, float curScale, float pixelDistance)
 {
     const int cols = cur.cols;
@@ -249,5 +236,86 @@ void CUHessianDetector::localizeKeypoint(int r, int c, float curScale, float pix
     // point is now scale and translation invariant, add it...
     if (hessianKeypointCallback)
        hessianKeypointCallback->onHessianKeypointDetected(prevBlur, pixelDistance*(c + b[0]), pixelDistance*(r + b[1]), pixelDistance*scale, pixelDistance, type, val);
+}*/
+
+/*
+void CUHessianDetector::detectPyramidKeypoints(const Mat &image)
+{
+
+    float curSigma = 0.5f;
+    float pixelDistance = 1.0f;
+    Mat firstLevel;
+
+    if (par.upscaleInputImage > 0)
+    {
+        // TODO CUDAble
+        firstLevel = doubleImage(image);
+        pixelDistance *= 0.5f;
+        curSigma *= 2.0f;
+    }
+    else
+        firstLevel = image.clone();
+
+    // prepare first octave input image
+    if (par.initialSigma > curSigma)
+    {
+        float sigma = sqrt(
+                par.initialSigma * par.initialSigma - curSigma * curSigma);
+        // CV
+        gaussianBlurInplace(firstLevel, sigma);
+    }
+
+    // while there is sufficient size of image
+    int minSize = 2 * par.border + 2;
+    while (firstLevel.rows > minSize && firstLevel.cols > minSize)
+    {
+        Mat nextOctaveFirstLevel;
+        // TODO CUDAble
+        detectOctaveKeypoints(firstLevel, pixelDistance, nextOctaveFirstLevel);
+        pixelDistance *= 2.0;
+        // firstLevel gets destroyed in the process
+        firstLevel = nextOctaveFirstLevel;
+    }
 }
+
+void CUHessianDetector::detectOctaveKeypoints(const Mat &firstLevel, float pixelDistance, Mat &nextOctaveFirstLevel)
+{
+    octaveMap = Mat::zeros(firstLevel.rows, firstLevel.cols, CV_8UC1);
+    float sigmaStep = pow(2.0f, 1.0f / (float) par.numberOfScales);
+    float curSigma = par.initialSigma;
+    blur = firstLevel;
+    cur = hessianResponse(blur, curSigma*curSigma);
+    int numLevels = 1;
+
+    for (int i = 1; i < par.numberOfScales+2; i++)
+    {
+       // compute the increase necessary for the next level and compute the next level
+       float sigma = curSigma * sqrt(sigmaStep * sigmaStep - 1.0f);
+       // do the blurring
+       Mat nextBlur = gaussianBlur(blur, sigma);
+       // the next level sigma
+       sigma = curSigma*sigmaStep;
+       // compute response for current level
+       high = hessianResponse(nextBlur, sigma*sigma);
+       numLevels ++;
+       // if we have three consecutive responses
+       if (numLevels == 3)
+       {
+          // find keypoints in this part of octave for curLevel
+          findLevelKeypoints(curSigma, pixelDistance);
+          numLevels--;
+       }
+       if (i == par.numberOfScales)
+          // downsample the right level for the next octave
+          nextOctaveFirstLevel = halfImage(nextBlur);
+       prevBlur = blur; blur = nextBlur;
+       // shift to the next response
+       low = cur; cur = high;
+       curSigma *= sigmaStep;
+    }
+}
+
+
+
+
 */
