@@ -17,7 +17,7 @@ using namespace cv::gpu;
 
 __global__ void performHessianResponse(const gpu::PtrStepSz<float> in, gpu::PtrStep<float> out, float norm2)
 {
-    //float v11, v12, v13, v21, v22, v23, v31, v32, v33;
+    float v11, v12, v13, v21, v22, v23, v31, v32, v33;
     int x = threadIdx.x + blockIdx.x * blockDim.x;
     int y = threadIdx.y + blockIdx.y * blockDim.y;
     if ((x > in.cols - 3) || (y > in.rows - 3))
@@ -25,16 +25,16 @@ __global__ void performHessianResponse(const gpu::PtrStepSz<float> in, gpu::PtrS
     //int offset = x + y * cols;
     /* fill in shift registers at the beginning of the row */
     /* fetch remaining values (last column) */
-    //v11 = in(y, x);     v12 = in(y + 1, x);     v13 = in(y + 2, x);
-    //v21 = in(y, x + 1); v22 = in(y + 1, x + 1); v23 = in(y + 2, x + 1);
-    //v31 = in(y, x + 2); v32 = in(y + 1, x + 2); v33 = in(y + 2, x + 2);
+    v11 = in(y, x);     v12 = in(y + 1, x);     v13 = in(y + 2, x);
+    v21 = in(y, x + 1); v22 = in(y + 1, x + 1); v23 = in(y + 2, x + 1);
+    v31 = in(y, x + 2); v32 = in(y + 1, x + 2); v33 = in(y + 2, x + 2);
     // compute 3x3 Hessian values from symmetric differences.
-    //float Lxx = (v21 - 2 * v22 + v23);
-    //float Lyy = (v12 - 2 * v22 + v32);
-    //float Lxy = (v13 - v11 + v31 - v33) / 4.0f;
-    float Lxx = (in(y, x + 1) - 2 * in(y + 1, x + 1) + in(y + 2, x + 1));
-    float Lyy = (in(y + 1, x) - 2 * in(y + 1, x + 1) + in(y + 1, x + 2));
-    float Lxy = (in(y + 2, x) - in(y, x) + in(y, x + 2) - in(y + 2, x + 2)) * 0.25f;
+    float Lxx = (v21 - 2 * v22 + v23);
+    float Lyy = (v12 - 2 * v22 + v32);
+    float Lxy = (v13 - v11 + v31 - v33) * 0.25f;
+//    float Lxx = (in(y, x + 1) - 2 * in(y + 1, x + 1) + in(y + 2, x + 1));
+//    float Lyy = (in(y + 1, x) - 2 * in(y + 1, x + 1) + in(y + 1, x + 2));
+//    float Lxy = (in(y + 2, x) - in(y, x) + in(y, x + 2) - in(y + 2, x + 2)) * 0.25f;
 
     /* normalize and write out */
     out(y + 1, x + 1) = (Lxx * Lyy - Lxy * Lxy) * norm2;

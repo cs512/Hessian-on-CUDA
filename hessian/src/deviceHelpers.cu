@@ -68,6 +68,7 @@ GpuMat cuDoubleImage(const GpuMat &input)
     dim3 threads(32, 32);
     performDoubleImage<<<blocks, threads>>>(input, n);
     performFinalDoubleImage<<<1, 1>>>(input, n);
+//    gpu::resize(input, n, n.size(), 2.0, 2.0, INTER_LINEAR);
     return n;
 }
 
