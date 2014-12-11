@@ -64,8 +64,8 @@ GpuMat cuDoubleImage(const GpuMat &input)
     const int cols = input.cols;
     GpuMat n(input.rows*2, input.cols*2, input.type());
     n.setTo(Scalar::all(0));
-    dim3 blocks((15 + cols) / 16, (15 + rows) / 16);
-    dim3 threads(16, 16);
+    dim3 blocks((31 + cols) / 32, (31 + rows) / 32);
+    dim3 threads(32, 32);
     performDoubleImage<<<blocks, threads>>>(input, n);
     performFinalDoubleImage<<<1, 1>>>(input, n);
     return n;

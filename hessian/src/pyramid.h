@@ -61,6 +61,7 @@ public:
     void detectOctaveKeypoints(const Mat &firstLevel, float pixelDistance, Mat &nextOctaveFirstLevel);
     void findLevelKeypoints(float curScale, float pixelDistance);
     void detectOctaveKeypoints(const gpu::GpuMat &firstLevel, float pixelDistance, gpu::GpuMat &nextOctaveFirstLevel);
+    void detectPyramidKeypoints(const gpu::GpuMat &image);
     //void localizeKeypoint(int r, int c, float curScale, float pixelDistance);
 private:
     gpu::GpuMat octaveMap;

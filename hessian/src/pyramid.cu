@@ -15,29 +15,29 @@
 using namespace cv;
 using namespace cv::gpu;
 
-__global__ void performHessianResponse(const gpu::PtrStep<float> in, gpu::PtrStep<float> out, float norm,
-        int cols, int rows)
+__global__ void performHessianResponse(const gpu::PtrStepSz<float> in, gpu::PtrStep<float> out, float norm2)
 {
-    float v11, v12, v13, v21, v22, v23, v31, v32, v33;
+    //float v11, v12, v13, v21, v22, v23, v31, v32, v33;
     int x = threadIdx.x + blockIdx.x * blockDim.x;
-    if (x > cols - 3)
-        return;
     int y = threadIdx.y + blockIdx.y * blockDim.y;
-    if (y > rows - 3)
+    if ((x > in.cols - 3) || (y > in.rows - 3))
         return;
     //int offset = x + y * cols;
     /* fill in shift registers at the beginning of the row */
     /* fetch remaining values (last column) */
-    v11 = in(y, x);     v12 = in(y + 1, x);     v13 = in(y + 2, x);
-    v21 = in(y, x + 1); v22 = in(y + 1, x + 1); v23 = in(y + 2, x + 1);
-    v31 = in(y, x + 2); v32 = in(y + 1, x + 2); v33 = in(y + 2, x + 2);
+    //v11 = in(y, x);     v12 = in(y + 1, x);     v13 = in(y + 2, x);
+    //v21 = in(y, x + 1); v22 = in(y + 1, x + 1); v23 = in(y + 2, x + 1);
+    //v31 = in(y, x + 2); v32 = in(y + 1, x + 2); v33 = in(y + 2, x + 2);
     // compute 3x3 Hessian values from symmetric differences.
-    float Lxx = (v21 - 2 * v22 + v23);
-    float Lyy = (v12 - 2 * v22 + v32);
-    float Lxy = (v13 - v11 + v31 - v33) / 4.0f;
+    //float Lxx = (v21 - 2 * v22 + v23);
+    //float Lyy = (v12 - 2 * v22 + v32);
+    //float Lxy = (v13 - v11 + v31 - v33) / 4.0f;
+    float Lxx = (in(y, x + 1) - 2 * in(y + 1, x + 1) + in(y + 2, x + 1));
+    float Lyy = (in(y + 1, x) - 2 * in(y + 1, x + 1) + in(y + 1, x + 2));
+    float Lxy = (in(y + 2, x) - in(y, x) + in(y, x + 2) - in(y + 2, x + 2)) * 0.25f;
 
     /* normalize and write out */
-    out(y + 1, x + 1) = (Lxx * Lyy - Lxy * Lxy) * norm;
+    out(y + 1, x + 1) = (Lxx * Lyy - Lxy * Lxy) * norm2;
 }
 
 void performHessianResponseCaller(const PtrStepSz<float>& inputImage, PtrStep<float> outputImage, float norm2)
@@ -45,9 +45,9 @@ void performHessianResponseCaller(const PtrStepSz<float>& inputImage, PtrStep<fl
     const int rows = inputImage.rows;
     const int cols = inputImage.cols;
     // TODO handle error
-    dim3 blocks((15 - 2 + cols) / 16, (15 - 2 + rows) / 16);
-    dim3 threads(16, 16);
-    performHessianResponse<<<blocks, threads>>>(inputImage, outputImage, norm2, cols, rows);
+    dim3 blocks((31 - 2 + cols) / 32, (15 - 2 + rows) / 16);
+    dim3 threads(32, 16);
+    performHessianResponse<<<blocks, threads>>>(inputImage, outputImage, norm2);
 }
 
 GpuMat CUHessianDetector::hessianResponse(const gpu::GpuMat &inputImage, float norm)
@@ -62,7 +62,7 @@ GpuMat CUHessianDetector::hessianResponse(const gpu::GpuMat &inputImage, float n
     return outputImage;
 }
 
-__device__ bool isMax(float val, const PtrStepSz<float> pix, int row, int col)
+__device__ bool isMax(float val, const PtrStep<float> pix, int row, int col)
 {
    for (int r = row - 1; r <= row + 1; r++)
    {
@@ -73,7 +73,7 @@ __device__ bool isMax(float val, const PtrStepSz<float> pix, int row, int col)
    return true;
 }
 
-__device__ bool isMin(float val, const PtrStepSz<float> pix, int row, int col)
+__device__ bool isMin(float val, const PtrStep<float> pix, int row, int col)
 {
    for (int r = row - 1; r <= row + 1; r++)
    {
@@ -84,9 +84,8 @@ __device__ bool isMin(float val, const PtrStepSz<float> pix, int row, int col)
    return true;
 }
 
-__global__ void performFindLevelKeypoints(const float border, const float curScale,
-        const float pixelDistance, const float positiveThreshold, const float negativeThreshold,
-        const PtrStepSz<float> low, const PtrStepSz<float> cur, const PtrStepSz<float> high)
+__global__ void performFindLevelKeypointsThreshold(const float border, const float positiveThreshold,
+        const float negativeThreshold, const PtrStepSz<float> cur, PtrStep<signed char> out)
 {
     int col = threadIdx.x + blockIdx.x * blockDim.x;
     if ((col >= cur.cols - border) || (col < border))
@@ -95,12 +94,27 @@ __global__ void performFindLevelKeypoints(const float border, const float curSca
     if ((row >= cur.rows - border) || (row < border))
         return;
     const float val = cur(row,col);
-    if ( (val > positiveThreshold && (isMax(val, cur, row, col) && isMax(val, low, row, col) && isMax(val, high, row, col))) ||
-         (val < negativeThreshold && (isMin(val, cur, row, col) && isMin(val, low, row, col) && isMin(val, high, row, col))) )
+    if (val > positiveThreshold)
+    {
+        out(row, col) = 1;
+    }
+    else if (val < negativeThreshold)
+    {
+        out(row, col) = -1;
+    }
+    else
+    {
+        out(row, col) = 0;
+    }
      // either positive -> local max. or negative -> local min.
         //localizeKeypoint(row, col, curScale, pixelDistance);
     return;
 }
+
+//if ( (val > positiveThreshold && (isMax(val, cur, row, col) && isMax(val, low, row, col) && isMax(val, high, row, col))) ||
+//     (val < negativeThreshold && (isMin(val, cur, row, col) && isMin(val, low, row, col) && isMin(val, high, row, col))) )
+// // either positive -> local max. or negative -> local min.
+//    //localizeKeypoint(row, col, curScale, pixelDistance);
 
 void CUHessianDetector::findLevelKeypoints(float curScale, float pixelDistance)
 {
@@ -110,8 +124,11 @@ void CUHessianDetector::findLevelKeypoints(float curScale, float pixelDistance)
     // TODO handle error
     dim3 blocks((15 - 2 + cols) / 16, (15 - 2 + rows) / 16);
     dim3 threads(16, 16);
-    performFindLevelKeypoints<<<blocks, threads>>>(par.border, curScale, pixelDistance,
-            positiveThreshold, negativeThreshold, low, cur, high);
+    GpuMat tempMap = GpuMat(rows, cols, CV_8SC1);
+    //tempMap.setTo(Scalar::all(0));
+//    performFindLevelKeypoints<<<blocks, threads>>>(par.border, curScale, pixelDistance,
+//            positiveThreshold, negativeThreshold, low, cur, high);
+    performFindLevelKeypointsThreshold<<<blocks, threads>>>(par.border, positiveThreshold, negativeThreshold, cur, tempMap);
     return;
 }
 
@@ -150,6 +167,39 @@ void CUHessianDetector::detectOctaveKeypoints(const GpuMat &firstLevel, float pi
       // shift to the next response
       low = cur; cur = high;
       curSigma *= sigmaStep;
+   }
+}
+
+void CUHessianDetector::detectPyramidKeypoints(const GpuMat &image)
+{
+   float curSigma = 0.5f;
+   float pixelDistance = 1.0f;
+   GpuMat   firstLevel;
+
+   if (par.upscaleInputImage > 0)
+   {
+      firstLevel = cuDoubleImage(image);
+      pixelDistance *= 0.5f;
+      curSigma *= 2.0f;
+   } else
+      firstLevel = image.clone();
+
+   // prepare first octave input image
+   if (par.initialSigma > curSigma)
+   {
+      float sigma = sqrt(par.initialSigma * par.initialSigma - curSigma * curSigma);
+      cuGaussianBlurInplace(firstLevel, sigma);
+   }
+
+   // while there is sufficient size of image
+   int minSize = 2 * par.border + 2;
+   while (firstLevel.rows > minSize && firstLevel.cols > minSize)
+   {
+      GpuMat nextOctaveFirstLevel;
+      detectOctaveKeypoints(firstLevel, pixelDistance, nextOctaveFirstLevel);
+      pixelDistance *= 2.0;
+      // firstLevel gets destroyed in the process
+      firstLevel = nextOctaveFirstLevel;
    }
 }
 

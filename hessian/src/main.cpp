@@ -26,8 +26,8 @@ using namespace std;
 using namespace cv;
 using namespace cv::gpu;
 
-const int cols = 1024;
-const int rows = 768;
+const int cols = 1920;
+const int rows = 1080;
 
 bool matIsEqualToGpuMat(Mat &cpCur, GpuMat &cuMat)
 {
@@ -59,7 +59,6 @@ void testOfHessianResponse(HessianDetector &cpDet, CUHessianDetector &cuDet, Mat
     gpu::GpuMat cuTestInput;
     //float *data = testInput.ptr<float>(0);
     cuTestInput.upload(testInput);
-
     float curSigma = cpDet.par.initialSigma;
     clock_t cuStart = clock();
     gpu::GpuMat cuDeviceCur = cuDet.hessianResponse(cuTestInput, curSigma*curSigma);
@@ -117,14 +116,36 @@ void testOfDoubleImage(HessianDetector &cpDet, CUHessianDetector &cuDet, Mat &te
     }
 }
 
+void testOfDetectOctaveKeypoints(HessianDetector &cpDet, CUHessianDetector &cuDet, Mat &testInput)
+{
+    cout << "test of CUHessianDetector::detectPyramidKeypoints" << endl;
+    gpu::GpuMat cuTestInput(testInput);
+    //float *data = testInput.ptr<float>(0);
+
+    clock_t cuStart = clock();
+    //gpu::GpuMat cuDeviceCur =
+    cuDet.detectPyramidKeypoints(cuTestInput);
+    clock_t cuEnd = clock();
+    //Mat cpCur = doubleImage(testInput);
+    cpDet.detectPyramidKeypoints(testInput);
+    clock_t cpEnd = clock();
+
+    //if(matIsEqualToGpuMat(cpCur, cuDeviceCur))
+    //{
+    cout<<"test pass."<<endl;
+    cout<<"CUDA:\t"<<double(cuEnd - cuStart)/CLOCKS_PER_SEC<<"s"<<endl;
+    cout<<"CPU:\t"<<double(cpEnd - cuEnd)/CLOCKS_PER_SEC<<"s"<<endl;
+    //}
+}
+
 int main(int argc, char **argv)
 {
+
     //gpu::setDevice(0);
     PyramidParams par;
     CUPyramidParams cuPar;
     CUHessianDetector cuDet(cuPar);
     HessianDetector cpDet(par);
-
     //srand( (unsigned)time( NULL ) );
     Mat testInput(rows, cols, CV_32F, Scalar(0));
     srand( (unsigned)time( NULL ) );
@@ -139,8 +160,7 @@ int main(int argc, char **argv)
     testOfHessianResponse(cpDet, cuDet, testInput);
     testOfHalfImage(cpDet, cuDet, testInput);
     testOfDoubleImage(cpDet, cuDet, testInput);
-
-
+    testOfDetectOctaveKeypoints(cpDet, cuDet, testInput);
 	return 0;
 }
 
