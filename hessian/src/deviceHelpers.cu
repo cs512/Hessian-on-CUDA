@@ -8,6 +8,8 @@
 #include <cv.h>
 #include <opencv2/gpu/gpu.hpp>
 #include <opencv2/gpu/gpumat.hpp>
+//#include <opencv2/gpu/>
+#include "texture_binder.hpp"
 #include <iostream>
 #include "deviceHelpers.h"
 using namespace cv;
@@ -17,13 +19,13 @@ __global__ void performDoubleImage(const PtrStepSz<float> in, PtrStep<float> out
 {
     const int cols = in.cols;
     const int rows = in.rows;
+
     const int x = threadIdx.x + blockIdx.x * blockDim.x;
     if (x >= cols)
         return;
     const int y = threadIdx.y + blockIdx.y * blockDim.y;
     if (y >= rows)
         return;
-
     const int x2 = x * 2;
     const int y2 = y * 2;
     if((x == cols - 1) && (y == rows - 1))
@@ -66,7 +68,9 @@ GpuMat cuDoubleImage(const GpuMat &input)
     n.setTo(Scalar::all(0));
     dim3 blocks((31 + cols) / 32, (31 + rows) / 32);
     dim3 threads(32, 32);
-    performDoubleImage<<<blocks, threads>>>(input, n);
+    texture<float, 2, cudaReadModeElementType> texRef;
+    TextureBinder tb((PtrStepSz<float>)input, texRef);
+    performDoubleImage<<<blocks, threads>>>(texRef, n);
     performFinalDoubleImage<<<1, 1>>>(input, n);
 //    gpu::resize(input, n, n.size(), 2.0, 2.0, INTER_LINEAR);
     return n;

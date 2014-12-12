@@ -24,7 +24,7 @@
 						<toolChain id="com.nvidia.cuda.tools.toolchain.exe.debug.885283396" name="CUDA Toolkit 6.5" superClass="com.nvidia.cuda.tools.toolchain.exe.debug">
 							<targetPlatform archList="all" binaryParser="com.nvidia.cuda.ide.elf;com.nvidia.cuda.ide.macho;com.nvidia.cuda.ide.cubin" id="com.nvidia.cuda.ide.targetPlatform.558457247" isAbstract="false" name="Debug Platform" osList="linux,macosx" superClass="com.nvidia.cuda.ide.targetPlatform"/>
 							<builder buildPath="${workspace_loc:/hessian}/Debug" id="com.nvidia.cuda.ide.builder.325016503" keepEnvironmentInBuildfile="false" managedBuildOn="true" name="CUDA Toolkit 6.5 Builder" superClass="com.nvidia.cuda.ide.builder"/>
-							<tool command="nvcc" id="nvcc.compiler.base.2113503314" name="NVCC Compiler" superClass="nvcc.compiler.base">
+							<tool command="nvcc" commandLinePattern="${COMMAND} --ptxas-options=-v ${FLAGS} ${OUTPUT_FLAG} ${OUTPUT_PREFIX} ${OUTPUT} ${INPUTS}" id="nvcc.compiler.base.2113503314" name="NVCC Compiler" superClass="nvcc.compiler.base">
 								<option id="nvcc.compiler.deviceDebug.701270808" name="Generate device debug information (-G)" superClass="nvcc.compiler.deviceDebug" value="true" valueType="boolean"/>
 								<option id="nvcc.compiler.option.level.347088601" name="Generate host debug information (-g)" superClass="nvcc.compiler.option.level" value="true" valueType="boolean"/>
 								<option defaultValue="nvcc.compiler.optimization.level.none" id="nvcc.compiler.optimization.level.902513339" name="Optimization Level" superClass="nvcc.compiler.optimization.level" valueType="enumerated"/>
@@ -145,14 +145,21 @@
 		<project id="hessian.com.nvidia.cuda.ide.exe.1535852807" name="Executable" projectType="com.nvidia.cuda.ide.exe"/>
 	</storageModule>
 	<storageModule moduleId="org.eclipse.cdt.core.LanguageSettingsProviders"/>
-	<storageModule moduleId="refreshScope"/>
+	<storageModule moduleId="refreshScope" versionNumber="2">
+		<configuration configurationName="Release">
+			<resource resourceType="PROJECT" workspacePath="/hessian"/>
+		</configuration>
+		<configuration configurationName="Debug">
+			<resource resourceType="PROJECT" workspacePath="/hessian"/>
+		</configuration>
+	</storageModule>
 	<storageModule moduleId="org.eclipse.cdt.make.core.buildtargets"/>
 	<storageModule moduleId="scannerConfiguration">
 		<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
-		<scannerConfigBuildInfo instanceId="com.nvidia.cuda.ide.configuration.debug.1759552179;com.nvidia.cuda.ide.configuration.debug.1759552179.;nvcc.compiler.base.2113503314;nvcc.compiler.input.cu.1342388774">
+		<scannerConfigBuildInfo instanceId="com.nvidia.cuda.ide.configuration.debug.1759552179;com.nvidia.cuda.ide.configuration.debug.1759552179.;nvcc.compiler.base.2113503314;nvcc.compiler.input.cpp.812892530">
 			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId="com.nvidia.cuda.ide.build.NVCCPerProjectProfile"/>
 		</scannerConfigBuildInfo>
-		<scannerConfigBuildInfo instanceId="com.nvidia.cuda.ide.configuration.debug.1759552179;com.nvidia.cuda.ide.configuration.debug.1759552179.;nvcc.compiler.base.2113503314;nvcc.compiler.input.cpp.812892530">
+		<scannerConfigBuildInfo instanceId="com.nvidia.cuda.ide.configuration.debug.1759552179;com.nvidia.cuda.ide.configuration.debug.1759552179.;nvcc.compiler.base.2113503314;nvcc.compiler.input.cu.1342388774">
 			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId="com.nvidia.cuda.ide.build.NVCCPerProjectProfile"/>
 		</scannerConfigBuildInfo>
 		<scannerConfigBuildInfo instanceId="com.nvidia.cuda.ide.configuration.debug.1759552179;com.nvidia.cuda.ide.configuration.debug.1759552179.;nvcc.compiler.base.2113503314;nvcc.compiler.input.c.1671310844">
