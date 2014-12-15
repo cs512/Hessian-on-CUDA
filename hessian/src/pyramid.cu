@@ -14,11 +14,29 @@
 #include "deviceHelpers.h"
 #include "texture_binder.hpp"
 
+#include "hesaff/helpers.h"
 
 using namespace cv;
 using namespace cv::gpu;
 
 texture<float, 2, cudaReadModeElementType> texRef;
+Stream stream1;
+
+int CUHessianDetector::getHessianPointType(float *ptr, float value)
+{
+    if (value < 0)
+        return CUHessianDetector::HESSIAN_SADDLE;
+    else
+    {
+        // at this point we know that 2x2 determinant is positive
+        // so only check the remaining 1x1 subdeterminant
+        float Lxx = (ptr[-1]-2*ptr[0]+ptr[1]);
+        if (Lxx < 0)
+            return CUHessianDetector::HESSIAN_DARK;
+        else
+            return CUHessianDetector::HESSIAN_BRIGHT;
+    }
+}
 
 __global__ void performHessianResponse(gpu::PtrStepSz<float> out, float norm2)
 {
@@ -126,20 +144,28 @@ void CUHessianDetector::findLevelKeypoints(float curScale, float pixelDistance)
 //            positiveThreshold, negativeThreshold, low, cur, high);
     performFindLevelKeypointsThreshold<<<blocks, threads>>>(par.border, positiveThreshold, negativeThreshold,
         low, cur, high, tempMap);
+    stream1.waitForCompletion();
 #ifdef DEBUG_H_PK
           tempMap.download((this->results.back()));
 #endif
     return;
 }
 
+
 void CUHessianDetector::detectOctaveKeypoints(const GpuMat &firstLevel, float pixelDistance, GpuMat &nextOctaveFirstLevel)
 {
-    octaveMap = GpuMat(firstLevel.rows, firstLevel.cols, CV_8UC1);
-    octaveMap.setTo(Scalar::all(0));
+    cOctaveMap = Mat(firstLevel.rows, firstLevel.cols, CV_8UC1, Scalar(0));
     float sigmaStep = pow(2.0f, 1.0f / (float) par.numberOfScales);
     float curSigma = par.initialSigma;
     blur = firstLevel;
+    cBlur = Mat(blur.rows, blur.cols, blur.type());
+    stream1.enqueueDownload(blur, cBlur);
+//    blur.download(cBlur, stream1);
+
     cur = hessianResponse(blur, curSigma*curSigma);
+//    cur.download(cCur, stream1);
+    cCur = Mat(cur.rows, cur.cols, cur.type());
+    stream1.enqueueDownload(cur, cCur);
     int numLevels = 1;
 
     for (int i = 1; i < par.numberOfScales+2; i++)
@@ -148,10 +174,16 @@ void CUHessianDetector::detectOctaveKeypoints(const GpuMat &firstLevel, float pi
         float sigma = curSigma * sqrt(sigmaStep * sigmaStep - 1.0f);
         // do the blurring
         GpuMat nextBlur = cuGaussianBlur(blur, sigma);
+        Mat cNextBlur= Mat(nextBlur.rows, nextBlur.cols, nextBlur.type());
+//        nextBlur.download(cNextBlur, stream1);
+        stream1.enqueueDownload(nextBlur, cNextBlur);
         // the next level sigma
         sigma = curSigma*sigmaStep;
         // compute response for current level
         high = hessianResponse(nextBlur, sigma*sigma);
+//        high.download(cHigh, stream1);
+        cHigh = Mat(high.rows, high.cols, high.type());
+        stream1.enqueueDownload(high, cHigh);
         numLevels ++;
         // if we have three consecutive responses
         if (numLevels == 3)
@@ -166,9 +198,12 @@ void CUHessianDetector::detectOctaveKeypoints(const GpuMat &firstLevel, float pi
         if (i == par.numberOfScales)
             // downsample the right level for the next octave
             nextOctaveFirstLevel = cuHalfImage(nextBlur);
+//        stream1.waitForCompletion();
         prevBlur = blur; blur = nextBlur;
+        cPrevBlur = cBlur; cBlur = cNextBlur;
         // shift to the next response
         low = cur; cur = high;
+        cLow = cCur; cCur = cHigh;
         curSigma *= sigmaStep;
     }
 }
@@ -206,6 +241,12 @@ void CUHessianDetector::detectPyramidKeypoints(const GpuMat &image)
    }
 }
 
+// it seems 0.6 works better than 0.5 (as in DL paper)
+#define MAX_SUBPIXEL_SHIFT 0.6
+
+// we don't care about border effects
+#define POINT_SAFETY_BORDER  3
+
 void CUHessianDetector::localizeKeypoint(int r, int c, float curScale, float pixelDistance)
 {
     const int cols = cur.cols;
@@ -221,11 +262,11 @@ void CUHessianDetector::localizeKeypoint(int r, int c, float curScale, float pix
        // take current position
        r = nr; c = nc;
 
-       float dxx = cur.at<float>(r,c-1) - 2.0f * cur.at<float>(r,c) + cur.at<float>(r,c+1);
-       float dyy = cur.at<float>(r-1,c) - 2.0f * cur.at<float>(r,c) + cur.at<float>(r+1,c);
-       float dss = low.at<float>(r,c  ) - 2.0f * cur.at<float>(r,c) + high.at<float>(r, c);
+       float dxx = cCur.at<float>(r,c-1) - 2.0f * cCur.at<float>(r,c) + cCur.at<float>(r,c+1);
+       float dyy = cCur.at<float>(r-1,c) - 2.0f * cCur.at<float>(r,c) + cCur.at<float>(r+1,c);
+       float dss = cLow.at<float>(r,c  ) - 2.0f * cCur.at<float>(r,c) + cHigh.at<float>(r, c);
 
-       float dxy = 0.25f*(cur.at<float>(r+1,c+1) - cur.at<float>(r+1,c-1) - cur.at<float>(r-1,c+1) + cur.at<float>(r-1,c-1));
+       float dxy = 0.25f*(cCur.at<float>(r+1,c+1) - cCur.at<float>(r+1,c-1) - cCur.at<float>(r-1,c+1) + cCur.at<float>(r-1,c-1));
        // check edge like shape of the response function in first iteration
        if (0 == iter)
        {
@@ -234,17 +275,17 @@ void CUHessianDetector::localizeKeypoint(int r, int c, float curScale, float pix
              // local neighbourhood looks like an edge
              return;
        }
-       float dxs = 0.25f*(high.at<float>(r  ,c+1) - high.at<float>(r  ,c-1) - low.at<float>(r  ,c+1) + low.at<float>(r  ,c-1));
-       float dys = 0.25f*(high.at<float>(r+1,c  ) - high.at<float>(r-1,c  ) - low.at<float>(r+1,c  ) + low.at<float>(r-1,c  ));
+       float dxs = 0.25f*(cHigh.at<float>(r  ,c+1) - cHigh.at<float>(r  ,c-1) - cLow.at<float>(r  ,c+1) + cLow.at<float>(r  ,c-1));
+       float dys = 0.25f*(cHigh.at<float>(r+1,c  ) - cHigh.at<float>(r-1,c  ) - cLow.at<float>(r+1,c  ) + cLow.at<float>(r-1,c  ));
 
        float A[9];
        A[0] = dxx; A[1] = dxy; A[2] = dxs;
        A[3] = dxy; A[4] = dyy; A[5] = dys;
        A[6] = dxs; A[7] = dys; A[8] = dss;
 
-       float dx = 0.5f*(cur.at<float>(r,c+1) - cur.at<float>(r,c-1));
-       float dy = 0.5f*(cur.at<float>(r+1,c) - cur.at<float>(r-1,c));
-       float ds = 0.5f*(high.at<float>(r,c)  - low.at<float>(r,c));
+       float dx = 0.5f*(cCur.at<float>(r,c+1) - cCur.at<float>(r,c-1));
+       float dy = 0.5f*(cCur.at<float>(r+1,c) - cCur.at<float>(r-1,c));
+       float ds = 0.5f*(cHigh.at<float>(r,c)  - cLow.at<float>(r,c));
 
        b[0] = - dx; b[1] = - dy; b[2] = - ds;
 
@@ -255,7 +296,7 @@ void CUHessianDetector::localizeKeypoint(int r, int c, float curScale, float pix
           return;
 
        // aproximate peak value
-       val = cur.at<float>(r,c) + 0.5f * (dx*b[0] + dy*b[1] + ds*b[2]);
+       val = cCur.at<float>(r,c) + 0.5f * (dx*b[0] + dy*b[1] + ds*b[2]);
 
        // if we are off by more than MAX_SUBPIXEL_SHIFT, update the position and iterate again
        if (b[0] >  MAX_SUBPIXEL_SHIFT) { if (c < cols - POINT_SAFETY_BORDER) nc++; else return; }
@@ -273,11 +314,11 @@ void CUHessianDetector::localizeKeypoint(int r, int c, float curScale, float pix
     }
 
     // if spatial localization was all right and the scale is close enough...
-    if (fabs(b[0]) > 1.5 || fabs(b[1]) > 1.5 || fabs(b[2]) > 1.5 || fabs(val) < finalThreshold || octaveMap.at<unsigned char>(r,c) > 0)
+    if (fabs(b[0]) > 1.5 || fabs(b[1]) > 1.5 || fabs(b[2]) > 1.5 || fabs(val) < finalThreshold || cOctaveMap.at<unsigned char>(r,c) > 0)
        return;
 
     // mark we were here already
-    octaveMap.at<unsigned char>(r,c) = 1;
+    cOctaveMap.at<unsigned char>(r,c) = 1;
 
     // output keypoint
     float scale = curScale * pow(2.0f, b[2] / par.numberOfScales );
@@ -287,5 +328,5 @@ void CUHessianDetector::localizeKeypoint(int r, int c, float curScale, float pix
 
     // point is now scale and translation invariant, add it...
     if (hessianKeypointCallback)
-       hessianKeypointCallback->onHessianKeypointDetected(prevBlur, pixelDistance*(c + b[0]), pixelDistance*(r + b[1]), pixelDistance*scale, pixelDistance, type, val);
+       hessianKeypointCallback->onHessianKeypointDetected(cPrevBlur, pixelDistance*(c + b[0]), pixelDistance*(r + b[1]), pixelDistance*scale, pixelDistance, type, val);
 }

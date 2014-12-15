@@ -46,6 +46,13 @@ struct CUPyramidParams
 };
 
 class CUHessianDetector {
+    enum
+    {
+        HESSIAN_DARK   = 0,
+        HESSIAN_BRIGHT = 1,
+        HESSIAN_SADDLE = 2,
+    };
+
 public:
     CUHessianKeypointCallback *hessianKeypointCallback;
     CUPyramidParams par;
@@ -65,13 +72,17 @@ public:
     void detectOctaveKeypoints(const gpu::GpuMat &firstLevel, float pixelDistance, gpu::GpuMat &nextOctaveFirstLevel);
     void detectPyramidKeypoints(const gpu::GpuMat &image);
     void localizeKeypoint(int r, int c, float curScale, float pixelDistance);
+    int getHessianPointType(float *ptr, float value);
+
 #ifdef DEBUG_H_PK
     vector <Mat> results;
 #endif
 private:
-    gpu::GpuMat octaveMap;
     gpu::GpuMat prevBlur, blur;
     gpu::GpuMat low, cur, high;
+    Mat cOctaveMap;
+    Mat cPrevBlur, cBlur;
+    Mat cLow, cCur, cHigh;
     const float edgeScoreThreshold;
     const float finalThreshold;
     const float positiveThreshold;

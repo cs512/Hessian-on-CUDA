@@ -25,3 +25,4 @@ void cuGaussianBlurInplace(GpuMat &inplace, float sigma)
    int size = (int)(2.0 * 3.0 * sigma + 1.0); if (size % 2 == 0) size++;
    cv::gpu::GaussianBlur(inplace, inplace, Size(size, size), sigma, sigma, BORDER_REPLICATE);
 }
+
