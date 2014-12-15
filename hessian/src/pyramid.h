@@ -10,6 +10,8 @@
 #include <cv.h>
 #include <opencv2/gpu/gpu.hpp>
 #include <opencv2/gpu/gpumat.hpp>
+#include <vector>
+#include "debug.h"
 using namespace cv;
 
 class CUHessianKeypointCallback
@@ -62,7 +64,10 @@ public:
     void findLevelKeypoints(float curScale, float pixelDistance);
     void detectOctaveKeypoints(const gpu::GpuMat &firstLevel, float pixelDistance, gpu::GpuMat &nextOctaveFirstLevel);
     void detectPyramidKeypoints(const gpu::GpuMat &image);
-    //void localizeKeypoint(int r, int c, float curScale, float pixelDistance);
+    void localizeKeypoint(int r, int c, float curScale, float pixelDistance);
+#ifdef DEBUG_H_PK
+    vector <Mat> results;
+#endif
 private:
     gpu::GpuMat octaveMap;
     gpu::GpuMat prevBlur, blur;

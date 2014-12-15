@@ -203,7 +203,6 @@ void HessianDetector::localizeKeypoint(int r, int c, float curScale, float pixel
    if (hessianKeypointCallback)
       hessianKeypointCallback->onHessianKeypointDetected(prevBlur, pixelDistance*(c + b[0]), pixelDistance*(r + b[1]), pixelDistance*scale, pixelDistance, type, val);
 }
-
 void HessianDetector::findLevelKeypoints(float curScale, float pixelDistance)
 {
    assert(par.border >= 2);
@@ -217,7 +216,15 @@ void HessianDetector::findLevelKeypoints(float curScale, float pixelDistance)
          if ( (val > positiveThreshold && (isMax(val, cur, r, c) && isMax(val, low, r, c) && isMax(val, high, r, c))) ||
               (val < negativeThreshold && (isMin(val, cur, r, c) && isMin(val, low, r, c) && isMin(val, high, r, c))) )
             // either positive -> local max. or negative -> local min.
-            localizeKeypoint(r, c, curScale, pixelDistance);
+         {
+#ifndef DEBUG_H_PK
+             localizeKeypoint(r, c, curScale, pixelDistance);
+#else
+             (this->results.back()).at<unsigned char>(r, c) = 1;
+//             cout<<'('<<r<<','<<c<<')'<<endl;
+#endif
+         }
+
       }
    }
 }
@@ -246,6 +253,9 @@ void HessianDetector::detectOctaveKeypoints(const Mat &firstLevel, float pixelDi
       if (numLevels == 3)
       {
          // find keypoints in this part of octave for curLevel
+#ifdef DEBUG_H_PK
+          this->results.push_back(Mat(cur.rows, cur.cols, CV_8UC1, Scalar(0)));
+#endif
          findLevelKeypoints(curSigma, pixelDistance);
          numLevels--;
       }      
@@ -285,7 +295,7 @@ void HessianDetector::detectPyramidKeypoints(const Mat &image)
    while (firstLevel.rows > minSize && firstLevel.cols > minSize)
    {
       Mat nextOctaveFirstLevel; 
-      detectOctaveKeypoints(firstLevel, pixelDistance, nextOctaveFirstLevel);      
+      detectOctaveKeypoints(firstLevel, pixelDistance, nextOctaveFirstLevel);
       pixelDistance *= 2.0;
       // firstLevel gets destroyed in the process
       firstLevel = nextOctaveFirstLevel;

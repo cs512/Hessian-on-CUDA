@@ -19,6 +19,7 @@
 #include "pyramid.h"
 #include "hesaff/helpers.h"
 #include "deviceHelpers.h"
+#include "hostHelpers.h"
 using namespace std;
 
 #include <cv.h>
@@ -26,8 +27,8 @@ using namespace std;
 using namespace cv;
 using namespace cv::gpu;
 
-const int cols = 1920;
-const int rows = 1080;
+//const int cols = 1920;
+//const int rows = 1080;
 
 bool matIsEqualToGpuMat(Mat &cpCur, GpuMat &cuMat)
 {
@@ -38,7 +39,9 @@ bool matIsEqualToGpuMat(Mat &cpCur, GpuMat &cuMat)
     {
         for(int eachCol = 0; eachCol < cpCur.cols; eachCol++)
         {
-            if(cuCur.at<float>(eachRow, eachCol) != cpCur.at<float>(eachRow, eachCol))
+            if((fabs((double)cuCur.at<float>(eachRow, eachCol) - (double)cpCur.at<float>(eachRow, eachCol)) >
+               (fabs((double)cuCur.at<float>(eachRow, eachCol)) * 0.0005)) &&
+               ((fabs((double)cuCur.at<float>(eachRow, eachCol) - (double)cpCur.at<float>(eachRow, eachCol)) > 0.0001)))
             {
                 cout<<"CUDA::CPU"<<endl;
                 cout<<cuCur.at<float>(eachRow, eachCol)<<"::"<<cpCur.at<float>(eachRow, eachCol);
@@ -53,12 +56,33 @@ bool matIsEqualToGpuMat(Mat &cpCur, GpuMat &cuMat)
         return false;
 }
 
+bool matIsEqualToGpuMat(Mat &cpCur, Mat &cuCur)
+{
+    int count = 0;
+    for (int eachRow = 0; eachRow < cpCur.rows; eachRow++)
+    {
+        for(int eachCol = 0; eachCol < cpCur.cols; eachCol++)
+        {
+            if(cuCur.at<unsigned char>(eachRow, eachCol) != cpCur.at<unsigned char>(eachRow, eachCol))
+            {
+                cout<<"CUDA::CPU"<<endl;
+                cout<<(int)cuCur.at<unsigned char>(eachRow, eachCol)<<"::"<<(int)cpCur.at<unsigned char>(eachRow, eachCol);
+                cout<<"\t@("<<eachRow<<","<<eachCol<<")"<<endl;
+                ++count;
+            }
+        }
+    }
+    if(count == 0)
+        return true;
+    else
+        return false;
+}
+
 void testOfHessianResponse(HessianDetector &cpDet, CUHessianDetector &cuDet, Mat &testInput)
 {
     cout << "test of HessianDetector::hessianResponse" << endl;
-    gpu::GpuMat cuTestInput;
-    //float *data = testInput.ptr<float>(0);
-    cuTestInput.upload(testInput);
+    gpu::GpuMat cuTestInput(testInput);
+    CV_Assert(cuTestInput.type() == CV_32FC1);
     float curSigma = cpDet.par.initialSigma;
     clock_t cuStart = clock();
     gpu::GpuMat cuDeviceCur = cuDet.hessianResponse(cuTestInput, curSigma*curSigma);
@@ -129,13 +153,47 @@ void testOfDetectOctaveKeypoints(HessianDetector &cpDet, CUHessianDetector &cuDe
     //Mat cpCur = doubleImage(testInput);
     cpDet.detectPyramidKeypoints(testInput);
     clock_t cpEnd = clock();
-
-    //if(matIsEqualToGpuMat(cpCur, cuDeviceCur))
-    //{
+#ifdef DEBUG_H_PK
+    vector<Mat>::iterator itg = cuDet.results.begin();
+    int count = 0;
+    for(vector<Mat>::iterator itc = cpDet.results.begin(); itc != cpDet.results.end(); ++itc)
+    {
+        if(!matIsEqualToGpuMat(*itg, *itc))
+        {
+            cout<<"test failed @ level:"<<count<<endl;
+        }
+        else
+        {
+            cout<<"test success @ level:"<<count<<endl;
+        }
+        ++itg;
+        ++count;
+    }
+#endif
     cout<<"test pass."<<endl;
     cout<<"CUDA:\t"<<double(cuEnd - cuStart)/CLOCKS_PER_SEC<<"s"<<endl;
     cout<<"CPU:\t"<<double(cpEnd - cuEnd)/CLOCKS_PER_SEC<<"s"<<endl;
-    //}
+}
+
+void testOfGaussianBlur(HessianDetector &cpDet, CUHessianDetector &cuDet, Mat &testInput)
+{
+    cout << "test of helper.cpp::gaussianBlur" << endl;
+    gpu::GpuMat cuTestInput;
+    //float *data = testInput.ptr<float>(0);
+    cuTestInput.upload(testInput);
+
+    clock_t cuStart = clock();
+    gpu::GpuMat cuDeviceCur = cuGaussianBlur(cuTestInput, 2.0);
+    clock_t cuEnd = clock();
+    Mat cpCur = gaussianBlur(testInput, 2.0);
+    clock_t cpEnd = clock();
+
+    if(matIsEqualToGpuMat(cpCur, cuDeviceCur))
+    {
+        cout<<"test pass."<<endl;
+        cout<<"CUDA:\t"<<double(cuEnd - cuStart)/CLOCKS_PER_SEC<<"s"<<endl;
+        cout<<"CPU:\t"<<double(cpEnd - cuEnd)/CLOCKS_PER_SEC<<"s"<<endl;
+    }
 }
 
 int main(int argc, char **argv)
@@ -147,21 +205,27 @@ int main(int argc, char **argv)
     CUHessianDetector cuDet(cuPar);
     HessianDetector cpDet(par);
     //srand( (unsigned)time( NULL ) );
-    Mat testInput(rows, cols, CV_32F, Scalar(0));
-    srand( (unsigned)time( NULL ) );
-    for (int eachRow = 0; eachRow < rows; eachRow++)
+//    Mat testInput(rows, cols, CV_32F, Scalar(0));
+
+    Mat tmp = imread("/home/wangjz/testImage.jpg");
+    Mat testInput(tmp.rows, tmp.cols, CV_32FC1, Scalar(0));
+
+    float *out = testInput.ptr<float>(0);
+    unsigned char *in  = tmp.ptr<unsigned char>(0);
+
+    for (size_t i=tmp.rows*tmp.cols; i > 0; i--)
     {
-        for(int eachCol = 0; eachCol < cols; eachCol++)
-        {
-            testInput.at<float>(eachRow, eachCol) = float(rand() % 256);
-        }
+        *out = (float(in[0]) + in[1] + in[2])/3.0f;
+        out++;
+        in+=3;
     }
 
     testOfHessianResponse(cpDet, cuDet, testInput);
     testOfHalfImage(cpDet, cuDet, testInput);
     testOfDoubleImage(cpDet, cuDet, testInput);
+    testOfGaussianBlur(cpDet, cuDet, testInput);
     testOfDetectOctaveKeypoints(cpDet, cuDet, testInput);
-	return 0;
+    return 0;
 }
 
 

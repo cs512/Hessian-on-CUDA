@@ -219,7 +219,7 @@ bool interpolateCheckBorders(const Mat &im, float ofsx, float ofsy, float a11, f
    }
    return false;
 }
-
+//TODO cuda
 bool interpolate(const Mat &im, float ofsx, float ofsy, float a11, float a12, float a21, float a22, Mat &res)
 {         
    bool ret = false;

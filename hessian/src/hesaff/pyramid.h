@@ -12,7 +12,7 @@
 
 #include <cv.h>
 #include <highgui.h>
-
+#include "../debug.h"
 using namespace cv;
 
 struct PyramidParams
@@ -78,7 +78,9 @@ public:
    void localizeKeypoint(int r, int c, float curScale, float pixelDistance);
    void findLevelKeypoints(float curScale, float pixelDistance);
    Mat hessianResponse(const Mat &inputImage, float norm);
-   
+#ifdef DEBUG_H_PK
+   vector <Mat> results;
+#endif
 private:
    // some constants derived from parameters
    const float edgeScoreThreshold;

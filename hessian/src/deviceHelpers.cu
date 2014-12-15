@@ -15,41 +15,48 @@
 using namespace cv;
 using namespace cv::gpu;
 
-__global__ void performDoubleImage(const PtrStepSz<float> in, PtrStep<float> out)
-{
-    const int cols = in.cols;
-    const int rows = in.rows;
+texture<float, 2, cudaReadModeElementType> texRef;
 
+__global__ void performDoubleImage(PtrStep<float> out,
+        const int cols, const int rows)
+{
+    //const int cols = in.cols;
+    //const int rows = in.rows;
     const int x = threadIdx.x + blockIdx.x * blockDim.x;
-    if (x >= cols)
-        return;
     const int y = threadIdx.y + blockIdx.y * blockDim.y;
-    if (y >= rows)
+    if ((x >= cols) || (y >= rows))
+    {
         return;
-    const int x2 = x * 2;
-    const int y2 = y * 2;
+    }
+    int x2 = x << 1;
+    int y2 = y << 1;
+    const float v11 = tex2D(texRef, x, y);
+    const float v12 = tex2D(texRef, x + 1, y);
+    const float v21 = tex2D(texRef, x, y + 1);
+    const float v22 = tex2D(texRef, x + 1, y + 1);
+
     if((x == cols - 1) && (y == rows - 1))
     {
         return;
     }
     else if (x == cols - 1)
     {
-        out(y2,x2)   = in(y,x);
-        out(y2+1,x2) = 0.5f*(in(y,x) + in(y+1,x));
+        out(y2,x2)   = v11;
+        out(y2+1,x2) = 0.5f*(v11 + v21);
         return;
     }
     else if (y == rows - 1)
     {
-        out(y2,x2)   = in(y, x);
-        out(y2,x2+1) = 0.5f*(in(y, x) + in(y, x+1));
+        out(y2,x2)   = v11;
+        out(y2,x2+1) = 0.5f*(v11 + v12);
         return;
     }
     else
     {
-        out(y2,x2)     = in(y, x);
-        out(y2,x2+1)   = 0.5f *(in(y, x)+in(y, x+1));
-        out(y2+1,x2)   = 0.5f *(in(y, x)+in(y+1, x));
-        out(y2+1,x2+1) = 0.25f*(in(y, x)+in(y, x+1)+in(y+1, x)+in(y+1, x+1));
+        out(y2,x2)     = v11;
+        out(y2,x2+1)   = 0.5f *(v11+v12);
+        out(y2+1,x2)   = 0.5f *(v11+v21);
+        out(y2+1,x2+1) = 0.25f*(v11+v12+v21+v22);
         return;
     }
 }
@@ -64,14 +71,19 @@ GpuMat cuDoubleImage(const GpuMat &input)
 {
     const int rows = input.rows;
     const int cols = input.cols;
-    GpuMat n(input.rows*2, input.cols*2, input.type());
+    GpuMat n(input.rows*2, input.cols*2, CV_32FC1);
+//    gpu::resize(input, n, n.size(), 2.0, 2.0, INTER_LINEAR);
     n.setTo(Scalar::all(0));
-    dim3 blocks((31 + cols) / 32, (31 + rows) / 32);
-    dim3 threads(32, 32);
-    texture<float, 2, cudaReadModeElementType> texRef;
+    dim3 blocks((15 + cols*2) / 16, (15 + rows*2) / 16);
+    dim3 threads(16, 16);
     TextureBinder tb((PtrStepSz<float>)input, texRef);
-    performDoubleImage<<<blocks, threads>>>(texRef, n);
+//    cudaChannelFormatDesc desc = cudaCreateChannelDesc<float>();
+//    cudaBindTexture2D(0, texRef, input.data, desc, input.cols, input.rows, input.step);
+//    std::cout<<n.rows<<' '<<n.cols<<std::endl;
+//    performDoubleImage<<<blocks, threads>>>((float*)n.data, n.step, input.cols, input.rows);
+    performDoubleImage<<<blocks, threads>>>(n, input.cols, input.rows);
     performFinalDoubleImage<<<1, 1>>>(input, n);
+//    cudaUnbindTexture(texRef);
 //    gpu::resize(input, n, n.size(), 2.0, 2.0, INTER_LINEAR);
     return n;
 }
