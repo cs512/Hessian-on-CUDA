@@ -80,9 +80,7 @@ public:
 private:
     gpu::GpuMat prevBlur, blur;
     gpu::GpuMat low, cur, high;
-    Mat cOctaveMap;
-    Mat cPrevBlur, cBlur;
-    Mat cLow, cCur, cHigh;
+    gpu::GpuMat octaveMap;
     const float edgeScoreThreshold;
     const float finalThreshold;
     const float positiveThreshold;

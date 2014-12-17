@@ -12,6 +12,7 @@
 #include "pyramid.h"
 #include "hostHelpers.h"
 #include "deviceHelpers.h"
+#include "deviceHelpers.cuh"
 #include "texture_binder.hpp"
 
 #include "hesaff/helpers.h"
@@ -21,6 +22,21 @@ using namespace cv::gpu;
 
 texture<float, 2, cudaReadModeElementType> texRef;
 Stream stream1;
+
+__device__ int cuGetHessianPointType(float *ptr, float value)
+{
+   if (value < 0)
+      return 2; //HessianDetector::HESSIAN_SADDLE;
+   else {
+      // at this point we know that 2x2 determinant is positive
+      // so only check the remaining 1x1 subdeterminant
+      float Lxx = (ptr[-1]-2*ptr[0]+ptr[1]);
+      if (Lxx < 0)
+         return 0; //HessianDetector::HESSIAN_DARK;
+      else
+         return 1; //HessianDetector::HESSIAN_BRIGHT;
+   }
+}
 
 int CUHessianDetector::getHessianPointType(float *ptr, float value)
 {
@@ -130,6 +146,158 @@ __global__ void performFindLevelKeypointsThreshold(const float border, const flo
 // // either positive -> local max. or negative -> local min.
 //    //localizeKeypoint(row, col, curScale, pixelDistance);
 
+// it seems 0.6 works better than 0.5 (as in DL paper)
+#define MAX_SUBPIXEL_SHIFT 0.6
+
+// we don't care about border effects
+#define POINT_SAFETY_BORDER  3
+
+struct hessianCallbackReturn
+{
+    float x;
+    float y;
+    float s;
+    float pixelDistance;
+    int type;
+    float response;
+};
+
+__device__ bool deviceLocalizeKeypoint(int r, int c, PtrStep<float>& low,
+        PtrStepSz<float>& cur, PtrStep<float>& high, PtrStep<float>& octaveMap, PtrStep<float>& blur,
+        float& curScale, float& pixelDistance, float& edgeScoreThreshold, float& finalThreshold, int& numberOfScales,
+        hessianCallbackReturn &ret)
+{
+    const int cols = cur.cols;
+    const int rows = cur.rows;
+
+    float b[3] = {};
+    float val = 0;
+    bool converged = false;
+    int nr = r, nc = c;
+
+    for (int iter=0; iter<5; iter++)
+    {
+       // take current position
+       r = nr; c = nc;
+
+       float dxx = cur(r,c-1) - 2.0f * cur(r,c) + cur(r,c+1);
+       float dyy = cur(r-1,c) - 2.0f * cur(r,c) + cur(r+1,c);
+       float dss = low(r,c  ) - 2.0f * cur(r,c) + high(r, c);
+
+       float dxy = 0.25f*(cur(r+1,c+1) - cur(r+1,c-1) - cur(r-1,c+1) + cur(r-1,c-1));
+       // check edge like shape of the response function in first iteration
+       if (0 == iter)
+       {
+          float edgeScore = (dxx + dyy)*(dxx + dyy)/(dxx * dyy - dxy * dxy);
+          if (edgeScore >= edgeScoreThreshold || edgeScore < 0)
+             // local neighbourhood looks like an edge
+             return false;
+       }
+       float dxs = 0.25f*(high(r  ,c+1) - high(r  ,c-1) - low(r  ,c+1) + low(r  ,c-1));
+       float dys = 0.25f*(high(r+1,c  ) - high(r-1,c  ) - low(r+1,c  ) + low(r-1,c  ));
+
+       float A[9];
+       A[0] = dxx; A[1] = dxy; A[2] = dxs;
+       A[3] = dxy; A[4] = dyy; A[5] = dys;
+       A[6] = dxs; A[7] = dys; A[8] = dss;
+
+       float dx = 0.5f*(cur(r,c+1) - cur(r,c-1));
+       float dy = 0.5f*(cur(r+1,c) - cur(r-1,c));
+       float ds = 0.5f*(high(r,c)  - low(r,c));
+
+       b[0] = - dx; b[1] = - dy; b[2] = - ds;
+
+       cuSolveLinear3x3(A, b);
+
+       // check if the solution is valid
+       if (isnan(b[0]) || isnan(b[1]) || isnan(b[2]))
+          return false;
+
+       // aproximate peak value
+       val = cur(r,c) + 0.5f * (dx*b[0] + dy*b[1] + ds*b[2]);
+
+       // if we are off by more than MAX_SUBPIXEL_SHIFT, update the position and iterate again
+       if (b[0] >  MAX_SUBPIXEL_SHIFT) { if (c < cols - POINT_SAFETY_BORDER) nc++; else return false; }
+       if (b[1] >  MAX_SUBPIXEL_SHIFT) { if (r < rows - POINT_SAFETY_BORDER) nr++; else return false; }
+       if (b[0] < -MAX_SUBPIXEL_SHIFT) { if (c >        POINT_SAFETY_BORDER) nc--; else return false; }
+       if (b[1] < -MAX_SUBPIXEL_SHIFT) { if (r >        POINT_SAFETY_BORDER) nr--; else return false; }
+
+       if (nr == r && nc == c)
+       {
+          // converged, displacement is sufficiently small, terminate here
+          // TODO: decide if we want only converged local extrema...
+          converged = true;
+          break;
+       }
+    }
+
+    // if spatial localization was all right and the scale is close enough...
+    if (fabs(b[0]) > 1.5 || fabs(b[1]) > 1.5 || fabs(b[2]) > 1.5 || fabs(val) < finalThreshold || octaveMap(r,c) > 0)
+       return false;
+
+    // mark we were here already
+    octaveMap(r,c) = 1;
+
+    // output keypoint
+    float scale = curScale * pow(2.0f, b[2] / numberOfScales );
+//
+//    // set point type according to final location
+    int type = cuGetHessianPointType(blur.ptr(r)+c, val);
+//
+//    // point is now scale and translation invariant, add it...
+//    if (hessianKeypointCallback)
+//       hessianKeypointCallback->onHessianKeypointDetected(prevBlur, pixelDistance*(c + b[0]), pixelDistance*(r + b[1]), pixelDistance*scale, pixelDistance, type, val);
+
+    ret.x = pixelDistance*(c + b[0]);
+    ret.y = pixelDistance*(r + b[1]);
+    ret.s = pixelDistance*scale;
+    ret.pixelDistance = pixelDistance;
+    ret.type = type;
+    ret.response = val;
+    return true;
+}
+
+//__device__ int indexOfHCR = 0;
+
+__global__ void performLocalizeKeypoints(PtrStep<unsigned char> in, PtrStep<float> low,
+        PtrStepSz<float> cur, PtrStep<float> high, PtrStep<float> octaveMap, PtrStep<float> blur,
+        float curScale, float pixelDistance, float edgeScoreThreshold, float finalThreshold, int numberOfScales,
+        hessianCallbackReturn *arr, int *indexOfHCR)
+{
+
+    int col = threadIdx.x + blockIdx.x * blockDim.x;
+    if (col >= cur.cols)
+    {
+        __syncthreads();
+        return;
+    }
+    int row = threadIdx.y + blockIdx.y * blockDim.y;
+    if (row >= cur.rows)
+    {
+        __syncthreads();
+        return;
+    }
+    if(row + col == 0)
+    {
+        *indexOfHCR = 0;
+        __syncthreads();
+    }
+    else
+    {
+        __syncthreads();
+    }
+    if(in(row, col) == 1)
+    {
+        hessianCallbackReturn ret;
+        if(deviceLocalizeKeypoint(row, col, low, cur, high, octaveMap, blur, curScale, pixelDistance, edgeScoreThreshold, finalThreshold, numberOfScales, ret))
+        {
+            int pos = atomicAdd(indexOfHCR, 1);
+            arr[pos] = ret;
+        }
+    }
+    return;
+}
+
 void CUHessianDetector::findLevelKeypoints(float curScale, float pixelDistance)
 {
     assert(par.border >= 2);
@@ -142,30 +310,34 @@ void CUHessianDetector::findLevelKeypoints(float curScale, float pixelDistance)
     tempMap.setTo(Scalar::all(0));
 //    performFindLevelKeypoints<<<blocks, threads>>>(par.border, curScale, pixelDistance,
 //            positiveThreshold, negativeThreshold, low, cur, high);
+    thrust::device_vector<hessianCallbackReturn> res(102400);
     performFindLevelKeypointsThreshold<<<blocks, threads>>>(par.border, positiveThreshold, negativeThreshold,
         low, cur, high, tempMap);
-    stream1.waitForCompletion();
+    int *devIndexPtr = NULL;
+    cudaMalloc((void **)&devIndexPtr, sizeof(int));
+    hessianCallbackReturn *arr = thrust::raw_pointer_cast(&res[0]);
+    performLocalizeKeypoints<<<blocks, threads>>>(tempMap, low,
+            cur, high, octaveMap, blur, curScale, pixelDistance, edgeScoreThreshold, finalThreshold, par.numberOfScales, arr, devIndexPtr);
+
 #ifdef DEBUG_H_PK
-          tempMap.download((this->results.back()));
+    int hIndexOfHCR;
+    cudaMemcpy(&hIndexOfHCR, devIndexPtr, sizeof(int), cudaMemcpyDeviceToHost);
+    std::cout<<"inedex of arr:"<<hIndexOfHCR<<std::endl;
+    tempMap.download((this->results.back()));
 #endif
+    cudaFree(devIndexPtr);
     return;
 }
 
 
 void CUHessianDetector::detectOctaveKeypoints(const GpuMat &firstLevel, float pixelDistance, GpuMat &nextOctaveFirstLevel)
 {
-    cOctaveMap = Mat(firstLevel.rows, firstLevel.cols, CV_8UC1, Scalar(0));
+    octaveMap = GpuMat(firstLevel.rows, firstLevel.cols, CV_8UC1);
+    octaveMap.setTo(Scalar::all(0));
     float sigmaStep = pow(2.0f, 1.0f / (float) par.numberOfScales);
     float curSigma = par.initialSigma;
     blur = firstLevel;
-    cBlur = Mat(blur.rows, blur.cols, blur.type());
-    stream1.enqueueDownload(blur, cBlur);
-//    blur.download(cBlur, stream1);
-
     cur = hessianResponse(blur, curSigma*curSigma);
-//    cur.download(cCur, stream1);
-    cCur = Mat(cur.rows, cur.cols, cur.type());
-    stream1.enqueueDownload(cur, cCur);
     int numLevels = 1;
 
     for (int i = 1; i < par.numberOfScales+2; i++)
@@ -174,16 +346,10 @@ void CUHessianDetector::detectOctaveKeypoints(const GpuMat &firstLevel, float pi
         float sigma = curSigma * sqrt(sigmaStep * sigmaStep - 1.0f);
         // do the blurring
         GpuMat nextBlur = cuGaussianBlur(blur, sigma);
-        Mat cNextBlur= Mat(nextBlur.rows, nextBlur.cols, nextBlur.type());
-//        nextBlur.download(cNextBlur, stream1);
-        stream1.enqueueDownload(nextBlur, cNextBlur);
         // the next level sigma
         sigma = curSigma*sigmaStep;
         // compute response for current level
         high = hessianResponse(nextBlur, sigma*sigma);
-//        high.download(cHigh, stream1);
-        cHigh = Mat(high.rows, high.cols, high.type());
-        stream1.enqueueDownload(high, cHigh);
         numLevels ++;
         // if we have three consecutive responses
         if (numLevels == 3)
@@ -198,12 +364,9 @@ void CUHessianDetector::detectOctaveKeypoints(const GpuMat &firstLevel, float pi
         if (i == par.numberOfScales)
             // downsample the right level for the next octave
             nextOctaveFirstLevel = cuHalfImage(nextBlur);
-//        stream1.waitForCompletion();
         prevBlur = blur; blur = nextBlur;
-        cPrevBlur = cBlur; cBlur = cNextBlur;
         // shift to the next response
         low = cur; cur = high;
-        cLow = cCur; cCur = cHigh;
         curSigma *= sigmaStep;
     }
 }
@@ -241,92 +404,4 @@ void CUHessianDetector::detectPyramidKeypoints(const GpuMat &image)
    }
 }
 
-// it seems 0.6 works better than 0.5 (as in DL paper)
-#define MAX_SUBPIXEL_SHIFT 0.6
 
-// we don't care about border effects
-#define POINT_SAFETY_BORDER  3
-
-void CUHessianDetector::localizeKeypoint(int r, int c, float curScale, float pixelDistance)
-{
-    const int cols = cur.cols;
-    const int rows = cur.rows;
-
-    float b[3] = {};
-    float val = 0;
-    bool converged = false;
-    int nr = r, nc = c;
-
-    for (int iter=0; iter<5; iter++)
-    {
-       // take current position
-       r = nr; c = nc;
-
-       float dxx = cCur.at<float>(r,c-1) - 2.0f * cCur.at<float>(r,c) + cCur.at<float>(r,c+1);
-       float dyy = cCur.at<float>(r-1,c) - 2.0f * cCur.at<float>(r,c) + cCur.at<float>(r+1,c);
-       float dss = cLow.at<float>(r,c  ) - 2.0f * cCur.at<float>(r,c) + cHigh.at<float>(r, c);
-
-       float dxy = 0.25f*(cCur.at<float>(r+1,c+1) - cCur.at<float>(r+1,c-1) - cCur.at<float>(r-1,c+1) + cCur.at<float>(r-1,c-1));
-       // check edge like shape of the response function in first iteration
-       if (0 == iter)
-       {
-          float edgeScore = (dxx + dyy)*(dxx + dyy)/(dxx * dyy - dxy * dxy);
-          if (edgeScore >= edgeScoreThreshold || edgeScore < 0)
-             // local neighbourhood looks like an edge
-             return;
-       }
-       float dxs = 0.25f*(cHigh.at<float>(r  ,c+1) - cHigh.at<float>(r  ,c-1) - cLow.at<float>(r  ,c+1) + cLow.at<float>(r  ,c-1));
-       float dys = 0.25f*(cHigh.at<float>(r+1,c  ) - cHigh.at<float>(r-1,c  ) - cLow.at<float>(r+1,c  ) + cLow.at<float>(r-1,c  ));
-
-       float A[9];
-       A[0] = dxx; A[1] = dxy; A[2] = dxs;
-       A[3] = dxy; A[4] = dyy; A[5] = dys;
-       A[6] = dxs; A[7] = dys; A[8] = dss;
-
-       float dx = 0.5f*(cCur.at<float>(r,c+1) - cCur.at<float>(r,c-1));
-       float dy = 0.5f*(cCur.at<float>(r+1,c) - cCur.at<float>(r-1,c));
-       float ds = 0.5f*(cHigh.at<float>(r,c)  - cLow.at<float>(r,c));
-
-       b[0] = - dx; b[1] = - dy; b[2] = - ds;
-
-       solveLinear3x3(A, b);
-
-       // check if the solution is valid
-       if (isnan(b[0]) || isnan(b[1]) || isnan(b[2]))
-          return;
-
-       // aproximate peak value
-       val = cCur.at<float>(r,c) + 0.5f * (dx*b[0] + dy*b[1] + ds*b[2]);
-
-       // if we are off by more than MAX_SUBPIXEL_SHIFT, update the position and iterate again
-       if (b[0] >  MAX_SUBPIXEL_SHIFT) { if (c < cols - POINT_SAFETY_BORDER) nc++; else return; }
-       if (b[1] >  MAX_SUBPIXEL_SHIFT) { if (r < rows - POINT_SAFETY_BORDER) nr++; else return; }
-       if (b[0] < -MAX_SUBPIXEL_SHIFT) { if (c >        POINT_SAFETY_BORDER) nc--; else return; }
-       if (b[1] < -MAX_SUBPIXEL_SHIFT) { if (r >        POINT_SAFETY_BORDER) nr--; else return; }
-
-       if (nr == r && nc == c)
-       {
-          // converged, displacement is sufficiently small, terminate here
-          // TODO: decide if we want only converged local extrema...
-          converged = true;
-          break;
-       }
-    }
-
-    // if spatial localization was all right and the scale is close enough...
-    if (fabs(b[0]) > 1.5 || fabs(b[1]) > 1.5 || fabs(b[2]) > 1.5 || fabs(val) < finalThreshold || cOctaveMap.at<unsigned char>(r,c) > 0)
-       return;
-
-    // mark we were here already
-    cOctaveMap.at<unsigned char>(r,c) = 1;
-
-    // output keypoint
-    float scale = curScale * pow(2.0f, b[2] / par.numberOfScales );
-
-    // set point type according to final location
-    int type = getHessianPointType(blur.ptr<float>(r)+c, val);
-
-    // point is now scale and translation invariant, add it...
-    if (hessianKeypointCallback)
-       hessianKeypointCallback->onHessianKeypointDetected(cPrevBlur, pixelDistance*(c + b[0]), pixelDistance*(r + b[1]), pixelDistance*scale, pixelDistance, type, val);
-}

@@ -78,6 +78,23 @@ bool matIsEqualToGpuMat(Mat &cpCur, Mat &cuCur)
         return false;
 }
 
+int countOfMat(Mat &cpCur)
+{
+    int count = 0;
+    for (int eachRow = 0; eachRow < cpCur.rows; eachRow++)
+    {
+        for(int eachCol = 0; eachCol < cpCur.cols; eachCol++)
+        {
+            if(cpCur.at<unsigned char>(eachRow, eachCol) == 1)
+            {
+                ++count;
+            }
+        }
+    }
+    return count;
+}
+
+
 void testOfHessianResponse(HessianDetector &cpDet, CUHessianDetector &cuDet, Mat &testInput)
 {
     cout << "test of HessianDetector::hessianResponse" << endl;
@@ -158,6 +175,7 @@ void testOfDetectOctaveKeypoints(HessianDetector &cpDet, CUHessianDetector &cuDe
     int count = 0;
     for(vector<Mat>::iterator itc = cpDet.results.begin(); itc != cpDet.results.end(); ++itc)
     {
+        cout<<"cpu mat points count:"<<countOfMat(*itc)<<endl;
         if(!matIsEqualToGpuMat(*itg, *itc))
         {
             cout<<"test failed @ level:"<<count<<endl;

@@ -8,6 +8,7 @@
 #include <cv.h>
 #include <opencv2/gpu/gpu.hpp>
 #include <opencv2/gpu/gpumat.hpp>
+#include <opencv2/gpu/device/utility.hpp>
 //#include <opencv2/gpu/>
 #include "texture_binder.hpp"
 #include <iostream>
@@ -17,6 +18,10 @@ using namespace cv::gpu;
 
 texture<float, 2, cudaReadModeElementType> texRef;
 
+__global__ void performFinalDoubleImage(const PtrStepSz<float> in, PtrStepSz<float> out)
+{
+    out(out.rows-1, out.cols-1) = out(in.rows-1, in.cols-1);
+}
 __global__ void performDoubleImage(PtrStep<float> out,
         const int cols, const int rows)
 {
@@ -59,11 +64,6 @@ __global__ void performDoubleImage(PtrStep<float> out,
         out(y2+1,x2+1) = 0.25f*(v11+v12+v21+v22);
         return;
     }
-}
-
-__global__ void performFinalDoubleImage(const PtrStepSz<float> in, PtrStepSz<float> out)
-{
-    out(out.rows-1, out.cols-1) = out(in.rows-1, in.cols-1);
 }
 
 // TODO CUDA
