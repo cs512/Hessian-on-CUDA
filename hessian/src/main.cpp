@@ -20,6 +20,7 @@
 #include "hesaff/helpers.h"
 #include "deviceHelpers.h"
 #include "hostHelpers.h"
+#include "affine.h"
 using namespace std;
 
 #include <cv.h>
@@ -29,6 +30,59 @@ using namespace cv::gpu;
 
 //const int cols = 1920;
 //const int rows = 1080;
+
+struct CUHessianAffineParams
+{
+   float threshold;
+   int   max_iter;
+   float desc_factor;
+   int   patch_size;
+   bool  verbose;
+   CUHessianAffineParams()
+      {
+         threshold = 16.0f/3.0f;
+         max_iter = 16;
+         desc_factor = 3.0f*sqrt(3.0f);
+         patch_size = 41;
+         verbose = false;
+      }
+};
+
+class CUAffineHessianDetector : public CUHessianDetector, CUAffineShape, CUHessianKeypointCallback, CUAffineShapeCallback
+{
+public:
+    const Mat image;
+    SIFTDescriptor sift;
+    int g_numberOfPoints;
+    int g_numberOfShapes;
+public:
+    CUAffineHessianDetector(const Mat &image, const CUPyramidParams &par, const CUAffineShapeParams &ap, const SIFTDescriptorParams &sp) :
+       CUHessianDetector(par),
+       CUAffineShape(ap),
+       image(image),
+       sift(sp)
+    {
+        this->setHessianKeypointCallback(this);
+        this->setAffineShapeCallback(this);
+        g_numberOfPoints = 0;
+        g_numberOfShapes = 0;
+    }
+
+    void onHessianKeypointDetected(const GpuMat &blur, float x, float y, float s, float pixelDistance, int type, float response)
+    {
+        g_numberOfPoints++;
+        findAffineShape(blur, x, y, s, pixelDistance, type, response);
+    }
+    void onAffineShapeFound(
+         const GpuMat &blur, float x, float y, float s, float pixelDistance,
+         float a11, float a12,
+         float a21, float a22,
+         int type, float response, int iters)
+    {
+        g_numberOfShapes++;
+        return;
+    }
+};
 
 bool matIsEqualToGpuMat(Mat &cpCur, GpuMat &cuMat)
 {
@@ -176,6 +230,7 @@ void testOfDetectOctaveKeypoints(HessianDetector &cpDet, CUHessianDetector &cuDe
     for(vector<Mat>::iterator itc = cpDet.results.begin(); itc != cpDet.results.end(); ++itc)
     {
         cout<<"cpu mat points count:"<<countOfMat(*itc)<<endl;
+        cout<<"gpu mat points count:"<<countOfMat(*itg)<<endl;
         if(!matIsEqualToGpuMat(*itg, *itc))
         {
             cout<<"test failed @ level:"<<count<<endl;
@@ -214,6 +269,54 @@ void testOfGaussianBlur(HessianDetector &cpDet, CUHessianDetector &cuDet, Mat &t
     }
 }
 
+void testOfInterpolate(Mat &testInput)
+{
+    cout << "test of helper.cpp::interpolate" << endl;
+    gpu::GpuMat cuTestInput;
+    //float *data = testInput.ptr<float>(0);
+    cuTestInput.upload(testInput);
+    gpu::GpuMat cuDeviceCur(19, 19, CV_32FC1);
+    Mat cpCur(19, 19, CV_32FC1);
+    clock_t cuStart = clock();
+    cuInterpolate(cuTestInput, 7, 6.5, 15, 14, 13, 12, cuDeviceCur);
+    clock_t cuEnd = clock();
+    interpolate(testInput, 7, 6.5, 15, 14, 13, 12, cpCur);
+    clock_t cpEnd = clock();
+
+    if(matIsEqualToGpuMat(cpCur, cuDeviceCur))
+    {
+        cout<<"test pass."<<endl;
+        cout<<"CUDA:\t"<<double(cuEnd - cuStart)/CLOCKS_PER_SEC<<"s"<<endl;
+        cout<<"CPU:\t"<<double(cpEnd - cuEnd)/CLOCKS_PER_SEC<<"s"<<endl;
+    }
+}
+
+void testOfComputeGrad(Mat &testInput)
+{
+    cout << "test of affine.cpp::computeGradient" << endl;
+    gpu::GpuMat cuTestInput;
+    //float *data = testInput.ptr<float>(0);
+    cuTestInput.upload(testInput);
+    gpu::GpuMat cuRes1(cuTestInput.rows, cuTestInput.cols, CV_32FC1);
+    gpu::GpuMat cuRes2(cuTestInput.rows, cuTestInput.cols, CV_32FC1);
+
+    Mat cpRes1(testInput.rows, testInput.cols, CV_32FC1);
+    Mat cpRes2(testInput.rows, testInput.cols, CV_32FC1);
+
+    clock_t cuStart = clock();
+    cuComputeGradient(cuTestInput, cuRes1, cuRes2);
+    clock_t cuEnd = clock();
+    computeGradient(testInput, cpRes1, cpRes2);
+    clock_t cpEnd = clock();
+
+    if(matIsEqualToGpuMat(cpRes1, cuRes1) && matIsEqualToGpuMat(cpRes2, cuRes2))
+    {
+        cout<<"test pass."<<endl;
+        cout<<"CUDA:\t"<<double(cuEnd - cuStart)/CLOCKS_PER_SEC<<"s"<<endl;
+        cout<<"CPU:\t"<<double(cpEnd - cuEnd)/CLOCKS_PER_SEC<<"s"<<endl;
+    }
+}
+
 int main(int argc, char **argv)
 {
 
@@ -243,6 +346,27 @@ int main(int argc, char **argv)
     testOfDoubleImage(cpDet, cuDet, testInput);
     testOfGaussianBlur(cpDet, cuDet, testInput);
     testOfDetectOctaveKeypoints(cpDet, cuDet, testInput);
+    testOfInterpolate(testInput);
+    testOfComputeGrad(testInput);
+
+    {
+        CUHessianAffineParams par;
+        CUPyramidParams p;
+        p.threshold = par.threshold;
+
+        CUAffineShapeParams ap;
+        ap.maxIterations = par.max_iter;
+        ap.patchSize = par.patch_size;
+        ap.mrSize = par.desc_factor;
+
+        SIFTDescriptorParams sp;
+        sp.patchSize = par.patch_size;
+
+        CUAffineHessianDetector detector(testInput, p, ap, sp);
+        detector.detectPyramidKeypoints(testInput);
+        cout<<"shapes from GPU: "<<detector.g_numberOfShapes<<endl;
+    }
+
     return 0;
 }
 

@@ -80,6 +80,7 @@ public:
    Mat hessianResponse(const Mat &inputImage, float norm);
 #ifdef DEBUG_H_PK
    vector <Mat> results;
+   int countOfPtInLevel;
 #endif
 private:
    // some constants derived from parameters

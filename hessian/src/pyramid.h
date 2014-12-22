@@ -17,7 +17,7 @@ using namespace cv;
 class CUHessianKeypointCallback
 {
 public:
-   virtual void onHessianKeypointDetected(const Mat &blur, float x, float y, float s, float pixelDistance, int type, float response) = 0;
+   virtual void onHessianKeypointDetected(const gpu::GpuMat &blur, float x, float y, float s, float pixelDistance, int type, float response) = 0;
 };
 
 struct CUPyramidParams
@@ -66,14 +66,17 @@ public:
         hessianKeypointCallback = 0;
     }
     gpu::GpuMat hessianResponse(const gpu::GpuMat &inputImage, float norm);
-    void detectPyramidKeypoints(const Mat &image);
-    void detectOctaveKeypoints(const Mat &firstLevel, float pixelDistance, Mat &nextOctaveFirstLevel);
+
     void findLevelKeypoints(float curScale, float pixelDistance);
     void detectOctaveKeypoints(const gpu::GpuMat &firstLevel, float pixelDistance, gpu::GpuMat &nextOctaveFirstLevel);
     void detectPyramidKeypoints(const gpu::GpuMat &image);
+    void detectPyramidKeypoints(const Mat &image);
     void localizeKeypoint(int r, int c, float curScale, float pixelDistance);
     int getHessianPointType(float *ptr, float value);
-
+    void setHessianKeypointCallback(CUHessianKeypointCallback *callback)
+          {
+             hessianKeypointCallback = callback;
+          }
 #ifdef DEBUG_H_PK
     vector <Mat> results;
 #endif

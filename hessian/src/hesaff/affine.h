@@ -14,6 +14,8 @@
 #include <cv.h>
 #include "helpers.h"
 
+void computeGradient(const cv::Mat &img, cv::Mat &gradx, cv::Mat &grady);
+
 struct AffineShapeParams
 {
    // number of affine shape interations

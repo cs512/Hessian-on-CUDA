@@ -112,8 +112,8 @@
 									<listOptionValue builtIn="false" value="/usr/local/include/opencv"/>
 									<listOptionValue builtIn="false" value="/usr/local/include"/>
 								</option>
-								<option id="nvcc.compiler.option.lineinfo.1227803484" superClass="nvcc.compiler.option.lineinfo" value="false" valueType="boolean"/>
-								<option id="nvcc.compiler.option.gprof.1543175741" superClass="nvcc.compiler.option.gprof" value="false" valueType="boolean"/>
+								<option id="nvcc.compiler.option.lineinfo.1227803484" name="Generate line-number information for device code (-lineinfo)" superClass="nvcc.compiler.option.lineinfo" value="false" valueType="boolean"/>
+								<option id="nvcc.compiler.option.gprof.1543175741" name="Generate gprof information (-pg)" superClass="nvcc.compiler.option.gprof" value="false" valueType="boolean"/>
 								<inputType id="nvcc.compiler.input.cu.1852154282" superClass="nvcc.compiler.input.cu"/>
 								<inputType id="nvcc.compiler.input.cpp.394131317" superClass="nvcc.compiler.input.cpp"/>
 								<inputType id="nvcc.compiler.input.c.1522441239" superClass="nvcc.compiler.input.c"/>
@@ -200,7 +200,7 @@
 				</configuration>
 			</storageModule>
 			<storageModule moduleId="com.nvidia.cuda.ide.build.project.ICudaProjectConfiguration">
-				<executable devicelink="false">
+				<executable devicelink="true">
 					<ptx major="3" minor="0"/>
 					<sass major="3" minor="0"/>
 				</executable>

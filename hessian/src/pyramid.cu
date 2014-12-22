@@ -20,7 +20,7 @@
 using namespace cv;
 using namespace cv::gpu;
 
-texture<float, 2, cudaReadModeElementType> texRef;
+static texture<float, 2, cudaReadModeElementType> texRef;
 Stream stream1;
 
 __device__ int cuGetHessianPointType(float *ptr, float value)
@@ -266,27 +266,9 @@ __global__ void performLocalizeKeypoints(PtrStep<unsigned char> in, PtrStep<floa
 {
 
     int col = threadIdx.x + blockIdx.x * blockDim.x;
-    if (col >= cur.cols)
-    {
-        __syncthreads();
-        return;
-    }
     int row = threadIdx.y + blockIdx.y * blockDim.y;
-    if (row >= cur.rows)
-    {
-        __syncthreads();
-        return;
-    }
-    if(row + col == 0)
-    {
-        *indexOfHCR = 0;
-        __syncthreads();
-    }
-    else
-    {
-        __syncthreads();
-    }
-    if(in(row, col) == 1)
+
+    if( (row < cur.rows) && (col < cur.cols) && in(row, col) == 1)
     {
         hessianCallbackReturn ret;
         if(deviceLocalizeKeypoint(row, col, low, cur, high, octaveMap, blur, curScale, pixelDistance, edgeScoreThreshold, finalThreshold, numberOfScales, ret))
@@ -315,14 +297,24 @@ void CUHessianDetector::findLevelKeypoints(float curScale, float pixelDistance)
         low, cur, high, tempMap);
     int *devIndexPtr = NULL;
     cudaMalloc((void **)&devIndexPtr, sizeof(int));
+    int z = 0;
+    cudaMemcpy((void *)devIndexPtr, &z, sizeof(int), cudaMemcpyHostToDevice);
     hessianCallbackReturn *arr = thrust::raw_pointer_cast(&res[0]);
     performLocalizeKeypoints<<<blocks, threads>>>(tempMap, low,
             cur, high, octaveMap, blur, curScale, pixelDistance, edgeScoreThreshold, finalThreshold, par.numberOfScales, arr, devIndexPtr);
-
-#ifdef DEBUG_H_PK
     int hIndexOfHCR;
     cudaMemcpy(&hIndexOfHCR, devIndexPtr, sizeof(int), cudaMemcpyDeviceToHost);
-    std::cout<<"inedex of arr:"<<hIndexOfHCR<<std::endl;
+    if(this->hessianKeypointCallback)
+    {
+        thrust::host_vector<hessianCallbackReturn> cb(res);
+        for(int i = 0; i < hIndexOfHCR; ++i)
+        {
+            this->hessianKeypointCallback->onHessianKeypointDetected(this->blur, cb[i].x, cb[i].y,
+                    cb[i].s, cb[i].pixelDistance, cb[i].type, cb[i].response);
+        }
+    }
+#ifdef DEBUG_H_PK
+    std::cout<<"pts in this level on GPU: "<<hIndexOfHCR<<std::endl;
     tempMap.download((this->results.back()));
 #endif
     cudaFree(devIndexPtr);
@@ -404,4 +396,10 @@ void CUHessianDetector::detectPyramidKeypoints(const GpuMat &image)
    }
 }
 
+void CUHessianDetector::detectPyramidKeypoints(const Mat &image)
+{
+    GpuMat tempImage;
+    tempImage.upload(image);
+    this->detectPyramidKeypoints(tempImage);
+}
 

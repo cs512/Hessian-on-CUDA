@@ -200,6 +200,9 @@ void HessianDetector::localizeKeypoint(int r, int c, float curScale, float pixel
    int type = getHessianPointType(blur.ptr<float>(r)+c, val);
 
    // point is now scale and translation invariant, add it...
+#ifdef DEBUG_H_PK
+   this->countOfPtInLevel += 1;
+#endif
    if (hessianKeypointCallback)
       hessianKeypointCallback->onHessianKeypointDetected(prevBlur, pixelDistance*(c + b[0]), pixelDistance*(r + b[1]), pixelDistance*scale, pixelDistance, type, val);
 }
@@ -208,6 +211,9 @@ void HessianDetector::findLevelKeypoints(float curScale, float pixelDistance)
    assert(par.border >= 2);
    const int rows = cur.rows;
    const int cols = cur.cols;
+#ifdef DEBUG_H_PK
+   this->countOfPtInLevel = 0;
+#endif
    for (int r = par.border; r < (rows - par.border); r++)
    {
       for (int c = par.border; c < (cols - par.border); c++) 
@@ -217,16 +223,20 @@ void HessianDetector::findLevelKeypoints(float curScale, float pixelDistance)
               (val < negativeThreshold && (isMin(val, cur, r, c) && isMin(val, low, r, c) && isMin(val, high, r, c))) )
             // either positive -> local max. or negative -> local min.
          {
-#ifndef DEBUG_H_PK
+//#ifndef DEBUG_H_PK
              localizeKeypoint(r, c, curScale, pixelDistance);
-#else
+//#else
+#ifdef DEBUG_H_PK
              (this->results.back()).at<unsigned char>(r, c) = 1;
 //             cout<<'('<<r<<','<<c<<')'<<endl;
+
 #endif
          }
-
       }
    }
+#ifdef DEBUG_H_PK
+   cout<<"pts in this level on CPU: "<<this->countOfPtInLevel<<endl;
+#endif
 }
 
 void HessianDetector::detectOctaveKeypoints(const Mat &firstLevel, float pixelDistance, Mat &nextOctaveFirstLevel)
