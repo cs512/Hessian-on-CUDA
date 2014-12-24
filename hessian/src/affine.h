@@ -14,6 +14,7 @@
 #include <cv.h>
 #include "hesaff/helpers.h"
 using namespace cv::gpu;
+using namespace cv;
 
 void cuComputeGradient(const GpuMat &img, GpuMat &gradx, GpuMat &grady);
 
@@ -51,7 +52,7 @@ struct CUAffineShapeParams
 struct CUAffineShapeCallback
 {
    virtual void onAffineShapeFound(
-      const GpuMat &blur,     // corresponding scale level
+      const Mat &blur,     // corresponding scale level
       float x, float y,     // subpixel, image coordinates
       float s,              // scale
       float pixelDistance,  // distance between pixels in provided blured image
@@ -71,9 +72,9 @@ public:
       fy(par.smmWindowSize, par.smmWindowSize, CV_32FC1)
       {
          this->par = par;
-         cv::Mat tempMask(par.smmWindowSize, par.smmWindowSize, CV_32FC1);
-         computeGaussMask(tempMask);
-         mask.upload(tempMask);
+//         cv::Mat tempMask(par.smmWindowSize, par.smmWindowSize, CV_32FC1);
+         computeGaussMask(mask);
+//         mask.upload(tempMask);
          affineShapeCallback = 0;
          fx = cv::Scalar(0);
          fy = cv::Scalar(0);
@@ -84,10 +85,10 @@ public:
       }
 
    // computes affine shape
-   bool findAffineShape(const cv::gpu::GpuMat &blur, float x, float y, float s, float pixelDistance, int type, float response);
+   bool findAffineShape(const Mat &blur, float x, float y, float s, float pixelDistance, int type, float response);
 
    // fills patch with affine normalized neighbourhood around point in the img, enlarged mrSize times
-   bool normalizeAffine(const cv::gpu::GpuMat &img, float x, float y, float s, float a11, float a12, float a21, float a22);
+   bool normalizeAffine(const Mat &img, float x, float y, float s, float a11, float a12, float a21, float a22);
 
    void setAffineShapeCallback(CUAffineShapeCallback *callback)
       {
@@ -95,7 +96,7 @@ public:
       }
 
 public:
-   cv::gpu::GpuMat patch;
+   Mat patch;
 
 protected:
    CUAffineShapeParams par;
@@ -103,7 +104,7 @@ protected:
 private:
    CUAffineShapeCallback *affineShapeCallback;
    std::vector<unsigned char> workspace;
-   cv::gpu::GpuMat mask, img, fx, fy;
+   Mat mask, img, fx, fy;
 };
 
 #endif /* AFFINE_H_ */

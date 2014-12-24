@@ -16,17 +16,17 @@ void computeGradient(const Mat &img, Mat &gradx, Mat &grady)
    const int width = img.cols;
    const int height = img.rows;
    for (int r = 0; r < height; ++r)
-      for (int c = 0; c < width; ++c) 
+      for (int c = 0; c < width; ++c)
       {
-         float xgrad, ygrad; 
-         if (c == 0) xgrad = img.at<float>(r,c+1) - img.at<float>(r,c); else 
-            if (c == width-1) xgrad = img.at<float>(r,c) - img.at<float>(r,c-1); else 
+         float xgrad, ygrad;
+         if (c == 0) xgrad = img.at<float>(r,c+1) - img.at<float>(r,c); else
+            if (c == width-1) xgrad = img.at<float>(r,c) - img.at<float>(r,c-1); else
                xgrad = img.at<float>(r,c+1) - img.at<float>(r,c-1);
-         
-         if (r == 0) ygrad = img.at<float>(r+1,c) - img.at<float>(r,c); else 
+
+         if (r == 0) ygrad = img.at<float>(r+1,c) - img.at<float>(r,c); else
             if (r == height-1) ygrad = img.at<float>(r,c) - img.at<float>(r-1,c); else
                ygrad = img.at<float>(r+1,c) - img.at<float>(r-1,c);
-         
+
          gradx.at<float>(r,c) = xgrad;
          grady.at<float>(r,c) = ygrad;
       }

@@ -17,7 +17,7 @@ using namespace cv;
 class CUHessianKeypointCallback
 {
 public:
-   virtual void onHessianKeypointDetected(const gpu::GpuMat &blur, float x, float y, float s, float pixelDistance, int type, float response) = 0;
+   virtual void onHessianKeypointDetected(const Mat &blur, float x, float y, float s, float pixelDistance, int type, float response) = 0;
 };
 
 struct CUPyramidParams

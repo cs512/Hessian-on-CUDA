@@ -307,9 +307,11 @@ void CUHessianDetector::findLevelKeypoints(float curScale, float pixelDistance)
     if(this->hessianKeypointCallback)
     {
         thrust::host_vector<hessianCallbackReturn> cb(res);
+        Mat tempBlur;
+        this->blur.download(tempBlur);
         for(int i = 0; i < hIndexOfHCR; ++i)
         {
-            this->hessianKeypointCallback->onHessianKeypointDetected(this->blur, cb[i].x, cb[i].y,
+            this->hessianKeypointCallback->onHessianKeypointDetected(tempBlur, cb[i].x, cb[i].y,
                     cb[i].s, cb[i].pixelDistance, cb[i].type, cb[i].response);
         }
     }

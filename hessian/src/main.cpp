@@ -48,6 +48,15 @@ struct CUHessianAffineParams
       }
 };
 
+struct Keypoint
+{
+   float x, y, s;
+   float a11,a12,a21,a22;
+   float response;
+   int type;
+   unsigned char desc[128];
+};
+
 class CUAffineHessianDetector : public CUHessianDetector, CUAffineShape, CUHessianKeypointCallback, CUAffineShapeCallback
 {
 public:
@@ -55,6 +64,7 @@ public:
     SIFTDescriptor sift;
     int g_numberOfPoints;
     int g_numberOfShapes;
+    vector<Keypoint> keys;
 public:
     CUAffineHessianDetector(const Mat &image, const CUPyramidParams &par, const CUAffineShapeParams &ap, const SIFTDescriptorParams &sp) :
        CUHessianDetector(par),
@@ -68,20 +78,48 @@ public:
         g_numberOfShapes = 0;
     }
 
-    void onHessianKeypointDetected(const GpuMat &blur, float x, float y, float s, float pixelDistance, int type, float response)
+    void onHessianKeypointDetected(const Mat &blur, float x, float y, float s, float pixelDistance, int type, float response)
     {
         g_numberOfPoints++;
         findAffineShape(blur, x, y, s, pixelDistance, type, response);
     }
     void onAffineShapeFound(
-         const GpuMat &blur, float x, float y, float s, float pixelDistance,
+         const Mat &blur, float x, float y, float s, float pixelDistance,
          float a11, float a12,
          float a21, float a22,
          int type, float response, int iters)
     {
-        g_numberOfShapes++;
+        // convert shape into a up is up frame
+        rectifyAffineTransformationUpIsUp(a11, a12, a21, a22);
+
+        // now sample the patch
+        if (!normalizeAffine(image, x, y, s, a11, a12, a21, a22))
+        {
+//            // compute SIFT
+//            sift.computeSiftDescriptor(this->patch);
+//            // store the keypoint
+//            keys.push_back(Keypoint());
+//            Keypoint &k = keys.back();
+//            k.x = x; k.y = y; k.s = s; k.a11 = a11; k.a12 = a12; k.a21 = a21; k.a22 = a22; k.response = response; k.type = type;
+//            for (int i=0; i<128; i++)
+//                k.desc[i] = (unsigned char)sift.vec[i];
+//            // debugging stuff
+//            if (0)
+//            {
+//                cout << "x: " << x << ", y: " << y
+//                    << ", s: " << s << ", pd: " << pixelDistance
+//                    << ", a11: " << a11 << ", a12: " << a12 << ", a21: " << a21 << ", a22: " << a22
+//                    << ", t: " << type << ", r: " << response << endl;
+//                for (size_t i=0; i<sift.vec.size(); i++)
+//                    cout << " " << sift.vec[i];
+//                cout << endl;
+//            }
+            g_numberOfShapes++;
+        }
         return;
     }
+
+
 };
 
 bool matIsEqualToGpuMat(Mat &cpCur, GpuMat &cuMat)
@@ -290,32 +328,32 @@ void testOfInterpolate(Mat &testInput)
         cout<<"CPU:\t"<<double(cpEnd - cuEnd)/CLOCKS_PER_SEC<<"s"<<endl;
     }
 }
-
-void testOfComputeGrad(Mat &testInput)
-{
-    cout << "test of affine.cpp::computeGradient" << endl;
-    gpu::GpuMat cuTestInput;
-    //float *data = testInput.ptr<float>(0);
-    cuTestInput.upload(testInput);
-    gpu::GpuMat cuRes1(cuTestInput.rows, cuTestInput.cols, CV_32FC1);
-    gpu::GpuMat cuRes2(cuTestInput.rows, cuTestInput.cols, CV_32FC1);
-
-    Mat cpRes1(testInput.rows, testInput.cols, CV_32FC1);
-    Mat cpRes2(testInput.rows, testInput.cols, CV_32FC1);
-
-    clock_t cuStart = clock();
-    cuComputeGradient(cuTestInput, cuRes1, cuRes2);
-    clock_t cuEnd = clock();
-    computeGradient(testInput, cpRes1, cpRes2);
-    clock_t cpEnd = clock();
-
-    if(matIsEqualToGpuMat(cpRes1, cuRes1) && matIsEqualToGpuMat(cpRes2, cuRes2))
-    {
-        cout<<"test pass."<<endl;
-        cout<<"CUDA:\t"<<double(cuEnd - cuStart)/CLOCKS_PER_SEC<<"s"<<endl;
-        cout<<"CPU:\t"<<double(cpEnd - cuEnd)/CLOCKS_PER_SEC<<"s"<<endl;
-    }
-}
+//
+//void testOfComputeGrad(Mat &testInput)
+//{
+//    cout << "test of affine.cpp::computeGradient" << endl;
+//    gpu::GpuMat cuTestInput;
+//    //float *data = testInput.ptr<float>(0);
+//    cuTestInput.upload(testInput);
+//    gpu::GpuMat cuRes1(cuTestInput.rows, cuTestInput.cols, CV_32FC1);
+//    gpu::GpuMat cuRes2(cuTestInput.rows, cuTestInput.cols, CV_32FC1);
+//
+//    Mat cpRes1(testInput.rows, testInput.cols, CV_32FC1);
+//    Mat cpRes2(testInput.rows, testInput.cols, CV_32FC1);
+//
+//    clock_t cuStart = clock();
+//    cuComputeGradient(cuTestInput, cuRes1, cuRes2);
+//    clock_t cuEnd = clock();
+//    computeGradient(testInput, cpRes1, cpRes2);
+//    clock_t cpEnd = clock();
+//
+//    if(matIsEqualToGpuMat(cpRes1, cuRes1) && matIsEqualToGpuMat(cpRes2, cuRes2))
+//    {
+//        cout<<"test pass."<<endl;
+//        cout<<"CUDA:\t"<<double(cuEnd - cuStart)/CLOCKS_PER_SEC<<"s"<<endl;
+//        cout<<"CPU:\t"<<double(cpEnd - cuEnd)/CLOCKS_PER_SEC<<"s"<<endl;
+//    }
+//}
 
 int main(int argc, char **argv)
 {
