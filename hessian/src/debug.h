@@ -7,6 +7,6 @@
 
 #ifndef DEBUG_H_
 #define DEBUG_H_
-#define DEBUG_H_PK //HessianDetector::detectPyramidKeypoints
+//#define DEBUG_H_PK //HessianDetector::detectPyramidKeypoints
 
 #endif /* DEBUG_H_ */

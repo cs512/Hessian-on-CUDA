@@ -177,6 +177,8 @@
 								</option>
 								<option id="nvcc.compiler.option.lineinfo.1438846573" name="Generate line-number information for device code (-lineinfo)" superClass="nvcc.compiler.option.lineinfo" value="true" valueType="boolean"/>
 								<option id="nvcc.compiler.option.gprof.179768820" name="Generate gprof information (-pg)" superClass="nvcc.compiler.option.gprof" value="true" valueType="boolean"/>
+								<option id="nvcc.compiler.precdiv.417413212" name="Use IEEE round-to-nearest mode for precision FP division (-prec-div)" superClass="nvcc.compiler.precdiv" value="true" valueType="boolean"/>
+								<option id="nvcc.compiler.fmad.1232818967" name="Contract FP multiplies and adds/subtracts into FP multiply-add operations (-fmad)" superClass="nvcc.compiler.fmad" value="true" valueType="boolean"/>
 								<inputType id="nvcc.compiler.input.cu.1350335560" superClass="nvcc.compiler.input.cu"/>
 								<inputType id="nvcc.compiler.input.cpp.1636171471" superClass="nvcc.compiler.input.cpp"/>
 								<inputType id="nvcc.compiler.input.c.27160921" superClass="nvcc.compiler.input.c"/>

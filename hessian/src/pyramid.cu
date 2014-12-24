@@ -163,7 +163,7 @@ struct hessianCallbackReturn
 };
 
 __device__ bool deviceLocalizeKeypoint(int r, int c, PtrStep<float>& low,
-        PtrStepSz<float>& cur, PtrStep<float>& high, PtrStep<float>& octaveMap, PtrStep<float>& blur,
+        PtrStepSz<float>& cur, PtrStep<float>& high, PtrStep<unsigned char>& octaveMap, PtrStep<float>& blur,
         float& curScale, float& pixelDistance, float& edgeScoreThreshold, float& finalThreshold, int& numberOfScales,
         hessianCallbackReturn &ret)
 {
@@ -260,7 +260,7 @@ __device__ bool deviceLocalizeKeypoint(int r, int c, PtrStep<float>& low,
 //__device__ int indexOfHCR = 0;
 
 __global__ void performLocalizeKeypoints(PtrStep<unsigned char> in, PtrStep<float> low,
-        PtrStepSz<float> cur, PtrStep<float> high, PtrStep<float> octaveMap, PtrStep<float> blur,
+        PtrStepSz<float> cur, PtrStep<float> high, PtrStep<unsigned char> octaveMap, PtrStep<float> blur,
         float curScale, float pixelDistance, float edgeScoreThreshold, float finalThreshold, int numberOfScales,
         hessianCallbackReturn *arr, int *indexOfHCR)
 {

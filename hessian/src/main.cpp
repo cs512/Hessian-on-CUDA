@@ -341,13 +341,13 @@ int main(int argc, char **argv)
         in+=3;
     }
 
-    testOfHessianResponse(cpDet, cuDet, testInput);
-    testOfHalfImage(cpDet, cuDet, testInput);
-    testOfDoubleImage(cpDet, cuDet, testInput);
-    testOfGaussianBlur(cpDet, cuDet, testInput);
-    testOfDetectOctaveKeypoints(cpDet, cuDet, testInput);
-    testOfInterpolate(testInput);
-    testOfComputeGrad(testInput);
+//    testOfHessianResponse(cpDet, cuDet, testInput);
+//    testOfHalfImage(cpDet, cuDet, testInput);
+//    testOfDoubleImage(cpDet, cuDet, testInput);
+//    testOfGaussianBlur(cpDet, cuDet, testInput);
+//    testOfDetectOctaveKeypoints(cpDet, cuDet, testInput);
+//    testOfInterpolate(testInput);
+//    testOfComputeGrad(testInput);
 
     {
         CUHessianAffineParams par;
@@ -363,8 +363,11 @@ int main(int argc, char **argv)
         sp.patchSize = par.patch_size;
 
         CUAffineHessianDetector detector(testInput, p, ap, sp);
+        clock_t cuStart = clock();
         detector.detectPyramidKeypoints(testInput);
+        clock_t cuEnd = clock();
         cout<<"shapes from GPU: "<<detector.g_numberOfShapes<<endl;
+        cout<<"CUDA:\t"<<double(cuEnd - cuStart)/CLOCKS_PER_SEC<<"s"<<endl;
     }
 
     return 0;
