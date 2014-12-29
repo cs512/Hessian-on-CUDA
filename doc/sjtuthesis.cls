@@ -17,7 +17,7 @@
 \DeclareOption{doctor}{\sjtu@doctortrue}
 \DeclareOption*{\PassOptionsToClass{\CurrentOption}{ctexbook}}
 \ProcessOptions\relax
-\LoadClass[a4paper,fancyhdr,fntef,UTF8]{ctexbook}
+\LoadClass[a4paper,fancyhdr,fntef,UTF8,c5size]{ctexbook}
 \ifsjtu@bachelor\relax\else
   \ifsjtu@master\relax\else
     \ifsjtu@doctor\relax\else
@@ -121,11 +121,13 @@
 
 % Page Layout
 \oddsidemargin 1.5 true cm
-\textheight 21 true cm
-\textwidth 14.5 true cm
-\headheight 15pt
+\textheight 23.35 true cm
+\textwidth 15.5 true cm
+\headheight 1.0 true cm
+\headsep 30pt
 \parskip 0.5ex plus 0.25ex minus 0.25ex
-\addtolength{\voffset}{-0.5cm} %% 上边距
+\addtolength{\voffset}{-0.65in} %% 上边距
+\addtolength{\hoffset}{-0.54cm} %% 左边距
 \if@openright
   \evensidemargin 0 true cm
 \else
@@ -232,7 +234,8 @@
 \newcommand\degree[1]{\def\sjtu@value@degree{#1}}
 \renewcommand\title[2][\sjtu@value@title]{%
   \def\sjtu@value@title{#2}
-  \def\sjtu@value@titlemark{\MakeUppercase{#1}}}
+  % \def\sjtu@value@titlemark{\MakeUppercase{#1}}
+  }
 \renewcommand\author[1]{\def\sjtu@value@author{#1}}
 \newcommand\advisor[1]{\def\sjtu@value@advisor{#1}}
 \newcommand\advisorinstitute[1]{\def\sjtu@value@advisorinstitute{#1}}
@@ -364,22 +367,49 @@
   \fi
 }
 
+
 % 根据学位论文类型、单双面打印设置页眉页脚类型
+
 \pagestyle{fancy}
 \fancyhf{}
 
 \ifsjtu@bachelor
   % 本科学位论文正文页眉页脚
-  \fancyhead[LO, RE]{\small {\it \includegraphics[width=0.22\textwidth]{sjtubanner}}}
-  \fancyhead[RO, LE]{\small {\it \sjtu@value@titlemark}}
-  \fancyfoot[C]{\small{}第~{\bf\thepage}~页\,{}共~{\bf\pageref{LastPage}}~页}
-  % 本科学位论文开章页页眉页脚，双面打印时只是交换左右页眉
-  \fancypagestyle{plain}{% 设置开章页页眉页脚风格(只有页码作为页脚)
-    \fancyhf{}%
-    \fancyhead[L]{\small {\it \includegraphics[width=0.22\textwidth]{sjtubanner}}}
+  \if@openright
+    \fancypagestyle{empty} {
+      \fancyhf{}
+      \fancyhead[LO, RE]{\small {\it \includegraphics[width=0.35\textwidth]{tongjilogo}}}
+      \fancyhead[RO, LE]{\small {\it \sjtu@value@titlemark}}
+      \fancyfoot{}
+    }
+    \fancyhead[LO, RE]{\small {\it \includegraphics[width=0.35\textwidth]{tongjilogo}}}
+    \fancyhead[RO, LE]{\small {\it \sjtu@value@titlemark}}
+    \fancyfoot[R]{\small{}第~{\bf\thepage}~页\,{}共~{\bf\pageref{LastPage}}~页}
+    % 本科学位论文开章页页眉页脚，双面打印时只是交换左右页眉
+    \fancypagestyle{plain}{% 设置开章页页眉页脚风格(只有页码作为页脚)
+      \fancyhf{}%
+      \fancyhead[L]{\small {\it \includegraphics[width=0.35\textwidth]{tongjilogo}}}
+      \fancyhead[R]{\small {\it \sjtu@value@titlemark}}
+      \fancyfoot[R]{\small{}第~{\bf\thepage}~页\,{}共~{\bf\pageref{LastPage}}~页}
+     }
+  \else
+    \fancypagestyle{empty} {
+      \fancyhf{}
+      \fancyhead[L]{\small {\it \includegraphics[width=0.35\textwidth]{tongjilogo}}}
+      \fancyhead[R]{\small {\it \sjtu@value@titlemark}}
+      \fancyfoot{}
+    }
+    \fancyhead[L]{\small {\it \includegraphics[width=0.35\textwidth]{tongjilogo}}}
     \fancyhead[R]{\small {\it \sjtu@value@titlemark}}
-    \fancyfoot[C]{\small{}第~{\bf\thepage}~页\,{}共~{\bf\pageref{LastPage}}~页}
-   }
+    \fancyfoot[R]{\small{}第~{\bf\thepage}~页\,{}共~{\bf\pageref{LastPage}}~页}
+    % 本科学位论文开章页页眉页脚
+    \fancypagestyle{plain} {
+      \fancyhf{}%
+      \fancyhead[L]{\small {\it \includegraphics[width=0.35\textwidth]{tongjilogo}}}
+      \fancyhead[R]{\small {\it \sjtu@value@titlemark}}
+      \fancyfoot[R]{\small{}第~{\bf\thepage}~页\,{}共~{\bf\pageref{LastPage}}~页}
+    }
+  \fi
 \else
   % 研究生学位论文正文页眉页脚，针对openright和openany单独设置
   \if@openright
@@ -412,13 +442,13 @@
 
 
 % 中英文摘要
-\newenvironment{abstract}{\chapter[\sjtu@label@abstract]{\sjtu@value@title\vskip 20pt\sjtu@label@abstract}}{}
+\newenvironment{abstract}{\chapter*{\sjtu@value@title\vskip 20pt\sjtu@label@abstract}}{}
 \newcommand\keywords[1]{\vspace{2ex}\noindent{\bf\large \sjtu@label@keywords} #1}
-\newenvironment{englishabstract}{\chapter[\sjtu@label@englishabstract]{\sjtu@value@englishtitle\vskip 20pt\bfseries \sjtu@label@englishabstract}}{}
+\newenvironment{englishabstract}{\chapter*{\sjtu@value@englishtitle\vskip 20pt\bfseries \sjtu@label@englishabstract}}{}
 \newcommand\englishkeywords[1]{\vspace{2ex}\noindent{\bf\large \sjtu@label@englishkeywords} #1}
 
 \renewcommand\tableofcontents{%
-  \chapter{\contentsname}
+  \chapter*{\contentsname}
   \@mkboth{\MakeUppercase\contentsname}{\MakeUppercase\contentsname}%
   \@starttoc{toc}%
 }
