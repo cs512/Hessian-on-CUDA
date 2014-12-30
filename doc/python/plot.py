@@ -1,6 +1,7 @@
 #coding: utf-8
 
 import re
+from scipy.optimize import leastsq
 
 class Result(object):
     """docstring for Result"""
@@ -41,7 +42,7 @@ template = "./res/image0.txt"
 
 resArr = []
 
-for x in xrange(10):
+for x in xrange(500):
     try:
         r = Result("./res/image{0}.txt".format(x))
         resArr.append(r)
@@ -57,6 +58,15 @@ import numpy as np
 
 pltDict = {}
 
+#待拟合的函数，x是变量，p是参数
+def fun(x, p):
+    a, b = p
+    return a*x + b
+
+#计算真实数据和拟合数据之间的误差，p是待拟合的参数，x和y分别是对应的真实数据
+def residuals(p, x, y):
+    return fun(x, p) - y
+
 class PltModel(object):
     """docstring for PltModel"""
     def __init__(self):
@@ -67,8 +77,9 @@ class PltModel(object):
 
     def plot(self, title):
         # plt.xkcd()
-
+        plt.figure(figsize=(16,6))
         plt.subplot(1,2,1)
+        
         plt.title(title)
         fcpu = self.plotWithCubic(self.cpuPts, self.cpuTime, 'rd', 'r--')
         fgpu = self.plotWithCubic(self.gpuPts, self.gpuTime, 'bx', 'b:')
@@ -91,8 +102,12 @@ class PltModel(object):
         plt.show()
 
     def plotWithCubic(self, arrSrc , arrDes, styPt, styLi):
-        f = interp1d(arrSrc, arrDes, kind='slinear')
+        # f = interp1d(arrSrc, arrDes, kind='slinear')
+        # xnew = np.linspace(arrSrc[0], arrSrc[-1])
+        # plt.plot(arrSrc, arrDes, styPt, xnew, f(xnew), styLi)
         xnew = np.linspace(arrSrc[0], arrSrc[-1])
+        r = leastsq(residuals, [0, 0], args=(np.array(arrSrc), np.array(arrDes)))
+        f = lambda x: r[0][0]*x + r[0][1]
         plt.plot(arrSrc, arrDes, styPt, xnew, f(xnew), styLi)
         return f
 

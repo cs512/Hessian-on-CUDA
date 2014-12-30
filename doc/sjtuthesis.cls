@@ -66,6 +66,7 @@
 \RequirePackage{listings}
 \RequirePackage[xetex]{hyperref}
 \RequirePackage{enumitem}
+%\RequirePackage{float}
 
 %==========
 % Segment 2. Define general-purpose LaTeX commands.
@@ -249,16 +250,24 @@
 \renewcommand\maketitle[1]{%
   \cleardoublepage
   \thispagestyle{empty}
+  \vspace*{3cm}
   \begin{center}
-      
-\songti\zihao{-3}\sjtu@label@statement
-
-    \vskip \stretch{1}
-       {\heiti\zihao{3} \sjtu@value@title}
-    \vskip \stretch{1}
+  
+%\songti\zihao{-3}\sjtu@label@statement
+  \begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\textwidth]{tongjititlelogo}
+  \end{figure}
+%    \vskip \stretch{1}
+    \heiti\zihao{0} \sjtu@value@titlemark
+    \vskip 0.3cm
+    \heiti\zihao{4} \sjtu@value@info
+       
+%    \vskip \stretch{1}
     {\fangsong\zihao{4}}
     \def\tabcolsep{1pt}
     \def\arraystretch{1.5}
+%    \vskip \stretch{1}
     \begin{tabular}{lc}
       \heiti\sjtu@label@author &\songti
       \sjtuunderline[150pt]{\sjtu@value@author}
@@ -276,7 +285,7 @@
       \sjtuunderline[150pt]{\sjtu@value@defenddate}
     \end{tabular}
   \end{center}
-  \vskip \stretch{0.5}
+%  \vskip \stretch{0.5}
   \clearpage
   \if@openright
     \cleardoublepage

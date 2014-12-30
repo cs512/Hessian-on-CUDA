@@ -24,7 +24,7 @@
 \renewcommand{\footrulewidth}{0.7pt}
 
 \usepackage{wrapfig}
-
+\usepackage{pdfpages}
 
 \begin{document}
 
@@ -42,22 +42,44 @@
 % \include{tex/abstract}
 
 %% 目录、插图目录、表格目录
+% \clearpage                       % Otherwise \pagestyle affects the previous page.
+% {                                % Enclosed in braces so that re-definition is temporary.
+%   \pagestyle{empty}              % Removes numbers from middle pages.
+%   \fancypagestyle{plain}         % Re-definition removes numbers from first page.
+%   {
+%     \fancyfoot{}
+%   }
+%   \include{tex/id}
+
+%   \includepdf[offset=-.2cm -0.65in]{title.pdf}
+
+%   % \maketitle
+%   % \makeenglishtitle
+  
+%   \include{tex/abstract}
+%   \tableofcontents
+%   \thispagestyle{empty}          % Removes numbers from last page.
+% }
+
+% \includepdf[offset=-.2cm -0.65in]{title.pdf}
+\includepdf[pagecommand={\thispagestyle{myheadings}}, offset=-.2cm -0.65in]{title.pdf}
+
 \clearpage                       % Otherwise \pagestyle affects the previous page.
 {                                % Enclosed in braces so that re-definition is temporary.
   \pagestyle{empty}              % Removes numbers from middle pages.
   \fancypagestyle{plain}         % Re-definition removes numbers from first page.
   {
-  	\fancyfoot{}
+    \fancyfoot{}
   }
   \include{tex/id}
-  \maketitle
+
+  % \maketitle
   % \makeenglishtitle
   
   \include{tex/abstract}
   \tableofcontents
   \thispagestyle{empty}          % Removes numbers from last page.
 }
-
 % \listoffigures
 % \addcontentsline{toc}{chapter}{\listfigurename} %将插图目录加入全文目录
 % \listoftables
