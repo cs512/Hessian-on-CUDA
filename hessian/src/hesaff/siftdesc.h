@@ -12,6 +12,15 @@
 #ifndef __SIFTDESC_H__
 #define __SIFTDESC_H__
 
+struct Keypoint
+{
+   float x, y, s;
+   float a11,a12,a21,a22;
+   float response;
+   int type;
+   unsigned char desc[128];
+};
+
 #include <vector>
 #include <cv.h>
 #include "helpers.h"

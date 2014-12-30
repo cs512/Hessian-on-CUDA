@@ -38,14 +38,7 @@ struct HessianAffineParams
 int g_numberOfPoints = 0;
 int g_numberOfAffinePoints = 0;
 
-struct Keypoint
-{
-   float x, y, s;
-   float a11,a12,a21,a22;
-   float response;
-   int type;
-   unsigned char desc[128];
-};
+
 
 struct AffineHessianDetector : public HessianDetector, AffineShape, HessianKeypointCallback, AffineShapeCallback
 {
@@ -82,24 +75,24 @@ public:
          if (!normalizeAffine(image, x, y, s, a11, a12, a21, a22))
          {
             // compute SIFT
-            sift.computeSiftDescriptor(this->patch);
-            // store the keypoint
-            keys.push_back(Keypoint());
-            Keypoint &k = keys.back();
-            k.x = x; k.y = y; k.s = s; k.a11 = a11; k.a12 = a12; k.a21 = a21; k.a22 = a22; k.response = response; k.type = type;
-            for (int i=0; i<128; i++)
-               k.desc[i] = (unsigned char)sift.vec[i];
-            // debugging stuff
-            if (0)
-            {
-               cout << "x: " << x << ", y: " << y
-                    << ", s: " << s << ", pd: " << pixelDistance
-                    << ", a11: " << a11 << ", a12: " << a12 << ", a21: " << a21 << ", a22: " << a22 
-                    << ", t: " << type << ", r: " << response << endl; 
-               for (size_t i=0; i<sift.vec.size(); i++)
-                  cout << " " << sift.vec[i];
-               cout << endl;
-            }
+//            sift.computeSiftDescriptor(this->patch);
+//            // store the keypoint
+//            keys.push_back(Keypoint());
+//            Keypoint &k = keys.back();
+//            k.x = x; k.y = y; k.s = s; k.a11 = a11; k.a12 = a12; k.a21 = a21; k.a22 = a22; k.response = response; k.type = type;
+//            for (int i=0; i<128; i++)
+//               k.desc[i] = (unsigned char)sift.vec[i];
+//            // debugging stuff
+//            if (0)
+//            {
+//               cout << "x: " << x << ", y: " << y
+//                    << ", s: " << s << ", pd: " << pixelDistance
+//                    << ", a11: " << a11 << ", a12: " << a12 << ", a21: " << a21 << ", a22: " << a22
+//                    << ", t: " << type << ", r: " << response << endl;
+//               for (size_t i=0; i<sift.vec.size(); i++)
+//                  cout << " " << sift.vec[i];
+//               cout << endl;
+//            }
             g_numberOfAffinePoints++;
          }
       }

@@ -31,6 +31,57 @@ using namespace cv::gpu;
 //const int cols = 1920;
 //const int rows = 1080;
 
+struct HessianAffineParams
+{
+   float threshold;
+   int   max_iter;
+   float desc_factor;
+   int   patch_size;
+   bool  verbose;
+   HessianAffineParams()
+      {
+         threshold = 16.0f/3.0f;
+         max_iter = 16;
+         desc_factor = 3.0f*sqrt(3.0f);
+         patch_size = 41;
+         verbose = false;
+      }
+};
+
+extern int g_numberOfPoints;
+extern int g_numberOfAffinePoints;
+
+
+
+struct AffineHessianDetector : public HessianDetector, AffineShape, HessianKeypointCallback, AffineShapeCallback
+{
+   const Mat image;
+   SIFTDescriptor sift;
+   vector<Keypoint> keys;
+public:
+//   AffineHessianDetector(const Mat &image, const PyramidParams &par, const AffineShapeParams &ap, const SIFTDescriptorParams &sp);
+
+   AffineHessianDetector(const Mat &image, const PyramidParams &par, const AffineShapeParams &ap, const SIFTDescriptorParams &sp) :
+         HessianDetector(par),
+         AffineShape(ap),
+         image(image),
+         sift(sp)
+         {
+            this->setHessianKeypointCallback(this);
+            this->setAffineShapeCallback(this);
+         }
+
+   void onAffineShapeFound(
+      const Mat &blur, float x, float y, float s, float pixelDistance,
+      float a11, float a12,
+      float a21, float a22,
+      int type, float response, int iters);
+
+   void onHessianKeypointDetected(const Mat &blur, float x, float y, float s, float pixelDistance, int type, float response);
+
+   void exportKeypoints(ostream &out);
+};
+
 struct CUHessianAffineParams
 {
    float threshold;
@@ -46,15 +97,6 @@ struct CUHessianAffineParams
          patch_size = 41;
          verbose = false;
       }
-};
-
-struct Keypoint
-{
-   float x, y, s;
-   float a11,a12,a21,a22;
-   float response;
-   int type;
-   unsigned char desc[128];
 };
 
 class CUAffineHessianDetector : public CUHessianDetector, CUAffineShape, CUHessianKeypointCallback, CUAffineShapeCallback
@@ -124,6 +166,7 @@ public:
 
 bool matIsEqualToGpuMat(Mat &cpCur, GpuMat &cuMat)
 {
+    return true;
     Mat cuCur;
     cuMat.download(cuCur);
     int count = 0;
@@ -150,6 +193,7 @@ bool matIsEqualToGpuMat(Mat &cpCur, GpuMat &cuMat)
 
 bool matIsEqualToGpuMat(Mat &cpCur, Mat &cuCur)
 {
+    return true;
     int count = 0;
     for (int eachRow = 0; eachRow < cpCur.rows; eachRow++)
     {
@@ -366,9 +410,19 @@ int main(int argc, char **argv)
     //srand( (unsigned)time( NULL ) );
 //    Mat testInput(rows, cols, CV_32F, Scalar(0));
 
-    Mat tmp = imread("/home/wangjz/testImage.jpg");
-    Mat testInput(tmp.rows, tmp.cols, CV_32FC1, Scalar(0));
+    Mat tmp;
+    if (argc>1)
+    {
+        tmp = imread(argv[1]);
+    }
+    else
+    {
+        tmp = imread("/home/wangjz/testImage.jpg");
+    }
 
+    Mat testInput(tmp.rows, tmp.cols, CV_32FC1, Scalar(0));
+    float pts = tmp.rows*tmp.cols/(float)1000000;
+    cout<<"total pts: "<<pts<<"M"<<endl;
     float *out = testInput.ptr<float>(0);
     unsigned char *in  = tmp.ptr<unsigned char>(0);
 
@@ -379,12 +433,12 @@ int main(int argc, char **argv)
         in+=3;
     }
 
-//    testOfHessianResponse(cpDet, cuDet, testInput);
-//    testOfHalfImage(cpDet, cuDet, testInput);
-//    testOfDoubleImage(cpDet, cuDet, testInput);
-//    testOfGaussianBlur(cpDet, cuDet, testInput);
-//    testOfDetectOctaveKeypoints(cpDet, cuDet, testInput);
-//    testOfInterpolate(testInput);
+    testOfHessianResponse(cpDet, cuDet, testInput);
+    testOfHalfImage(cpDet, cuDet, testInput);
+    testOfDoubleImage(cpDet, cuDet, testInput);
+    testOfGaussianBlur(cpDet, cuDet, testInput);
+    testOfDetectOctaveKeypoints(cpDet, cuDet, testInput);
+    testOfInterpolate(testInput);
 //    testOfComputeGrad(testInput);
 
     {
@@ -406,6 +460,34 @@ int main(int argc, char **argv)
         clock_t cuEnd = clock();
         cout<<"shapes from GPU: "<<detector.g_numberOfShapes<<endl;
         cout<<"CUDA:\t"<<double(cuEnd - cuStart)/CLOCKS_PER_SEC<<"s"<<endl;
+    }
+    {
+            // copy params
+            HessianAffineParams par;
+            PyramidParams p;
+            p.threshold = par.threshold;
+
+            AffineShapeParams ap;
+            ap.maxIterations = par.max_iter;
+            ap.patchSize = par.patch_size;
+            ap.mrSize = par.desc_factor;
+
+            SIFTDescriptorParams sp;
+            sp.patchSize = par.patch_size;
+
+            AffineHessianDetector detector(testInput, p, ap, sp);
+            g_numberOfPoints = 0;
+            clock_t cpStart = clock();
+            detector.detectPyramidKeypoints(testInput);
+            clock_t cpEnd = clock();
+            cout << "Detected " << g_numberOfPoints << " keypoints and " << g_numberOfAffinePoints << " affine shapes in " << double(cpEnd - cpStart)/CLOCKS_PER_SEC << " sec." << endl;
+
+//            char suffix[] = ".hesaff.sift";
+//            int len = strlen(argv[1])+strlen(suffix)+1;
+//            char buf[len];
+//            snprintf(buf, len, "%s%s", argv[1], suffix); buf[len-1]=0;
+//            ofstream out(buf);
+//            detector.exportKeypoints(out);
     }
 
     return 0;
