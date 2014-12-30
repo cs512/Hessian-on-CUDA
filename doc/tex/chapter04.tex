@@ -1,0 +1,21 @@
+%%==================================================
+%% chapter04.tex for SJTU Master Thesis
+%% Encoding: UTF-8
+%%==================================================
+
+\chapter{算法在CUDA平台的实现}
+  本实习在Ubuntu 14.04.1 LTS上实现了Hessian-Affine的CUDA版本，并且通过不同分辨率的图片测试出了算法中各个函数的加速比，以及整体的加速比。
+  \subparagraph{测试数据}
+    由于本算法会被两个变量影响性能：
+    \begin{enumerate}
+      \item 图像大小
+      \item 图像复杂度
+    \end{enumerate}
+    \par
+    因此，为了测试加速比，我选用了10张分辨率为1024*768的图像作测试，由于以特征点数量作为因变量，时间作为参变量。同时又选取了同一张图片的10种分辨率，在测试图像大小对算法的影响。以上图片均来自Oxford 5k数据集。
+  \subparagraph{数据流}
+    本算法的数据流简要如下：生成尺度空间->在尺度空间中计算每个点的Hessian相应->精确定位特征点->寻找仿射标准形->计算SIFT描述子。在这个算法中，每个部分的都可以并行，但是并行的粒度不同，导致了CUDA的加速比不同。
+  \subparagraph{生成尺度空间}
+    这部分中，由于尺度空间的生成用到了大量的逻辑控制运算，在编写这部分代码时，逻辑运算在CPU侧运行，数据与代码运算在GPU侧运行。在这部分算法中，关键的函数有\fbox{\tt helper.cpp::halfImage}、\fbox{\tt helper.cpp::doubleImage}与\fbox{\tt helper.cpp::gaussianBlur}。这三个函数的加速比如下：
+
+

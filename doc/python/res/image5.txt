@@ -1,0 +1,27 @@
+total pts: 0.786432M
+test of HessianDetector::hessianResponse
+CUDA::CPU
+0.727828::0.7282	@(282,247)
+test of helper.cpp::halfImage
+test pass.
+CUDA:	0.000539s
+CPU:	0.000464s
+test of helper.cpp::doubleImage
+test pass.
+CUDA:	0.0006s
+CPU:	0.010919s
+test of helper.cpp::gaussianBlur
+test pass.
+CUDA:	0.002181s
+CPU:	0.009548s
+test of CUHessianDetector::detectPyramidKeypoints
+test pass.
+CUDA:	0.037219s
+CPU:	0.110339s
+test of helper.cpp::interpolate
+test pass.
+CUDA:	0.00085s
+CPU:	1.6e-05s
+shapes from GPU: 2006
+CUDA:	0.579322s
+Detected 3147 keypoints and 2040 affine shapes in 0.620867 sec.

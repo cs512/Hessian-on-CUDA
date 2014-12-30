@@ -13,6 +13,7 @@
 *.xdv
 *~
 *.fdb_latexmk
+*.synctex.gz
 diss.pdf
 temptest.pdf
 thesis.pdf
